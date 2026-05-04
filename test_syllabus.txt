@@ -1,0 +1,37 @@
+Course Title: CSE-502 Mobile Computing VI Sem
+
+Aim of the Course:
+To introduce students to the concepts of mobile computing and wireless communication.
+
+Course Outcomes:
+CO 1 = Understand mobile communication concepts
+CO 2 = Explain wireless networking protocols
+
+Unit I: Introduction to Mobile Computing
+1.1 Concept of Mobile Communication
+1.2 Different generations of wireless technology (1G to 5G)
+1.3 Basics of cell, cluster and
+frequency reuse concept
+1.4 Handoff strategies
+
+Unit II: Wireless Networking
+2.1 IEEE 802.11 Architecture
+2.2 Bluetooth protocol stack
+2.3 Mobile IP and its working
+2.4 WAP Architecture and Protocol
+
+Unit III: Mobile Operating Systems
+3.1 Android Architecture and Components
+3.2 iOS Application Lifecycle
+3.3 Cross-platform development frameworks
+3.4 Mobile app security fundamentals
+
+Unit IV: Advanced Mobile Technologies
+4.1 Location Based Services (LBS)
+4.2 Mobile Cloud Computing
+4.3 Internet of Things (IoT) integration
+4.4 Edge Computing concepts
+
+Reference Books:
+1. Mobile Computing - Raj Kamal
+2. Wireless Communications - Rappaport
