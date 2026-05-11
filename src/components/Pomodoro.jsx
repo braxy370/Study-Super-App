@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, BellOff } from 'lucide-react';
 import clsx from 'clsx';
 import { playClick, startAlarmLoop, stopAlarmLoop } from '../utils/audio';
+import { completeFocusSession } from '../utils/gamification';
 
 export default function Pomodoro({ durations: rawDurations, onAlarmStateChange }) {
   const durations = {
@@ -126,19 +127,10 @@ export default function Pomodoro({ durations: rawDurations, onAlarmStateChange }
           setTimeout(() => setShowReward(false), 3000);
         }
 
-        const today = new Date().toDateString();
-        const lastDate = localStorage.getItem('lastStudyDate');
-        let currentMinutes = Number(localStorage.getItem('totalMinutesStudiedToday')) || 0;
-        
-        if (lastDate !== today) {
-          currentMinutes = 0;
-          localStorage.setItem('lastStudyDate', today);
-        }
-        
-        const updatedMinutes = currentMinutes + durations.WORK;
-        localStorage.setItem('totalMinutesStudiedToday', updatedMinutes.toString());
-        window.dispatchEvent(new CustomEvent('focusTimeUpdated', { detail: updatedMinutes }));
-        window.dispatchEvent(new CustomEvent('syncNeeded'));
+        // Update gamification engine
+        completeFocusSession(durations.WORK);
+        window.dispatchEvent(new CustomEvent('focusSessionComplete'));
+        window.dispatchEvent(new CustomEvent('focusTimeUpdated'));
       }
     }
   }, [isActive, targetTime, mode, currentRounds, durations.WORK]);

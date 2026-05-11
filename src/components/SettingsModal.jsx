@@ -184,9 +184,9 @@ export default function SettingsModal({ isOpen, onClose, settings, onSave }) {
 
               <div className="h-px w-full bg-white/10" />
 
-              {/* Semester Settings (Legacy/Retained) */}
+              {/* Goal Timeline */}
               <div className="space-y-4">
-                <h3 className="text-white/50 font-medium uppercase text-xs tracking-wider">Semester Dates</h3>
+                <h3 className="text-white/50 font-medium uppercase text-xs tracking-wider">Goal Timeline</h3>
                 <div className="flex gap-4">
                   <div className="flex-1">
                     <label className="block text-xs font-medium text-gray-400 mb-1">Start Date</label>
@@ -263,8 +263,8 @@ export default function SettingsModal({ isOpen, onClose, settings, onSave }) {
               <div className="space-y-4">
                 <div className="flex justify-between items-center bg-white/5 p-4 rounded-lg border border-white/10">
                   <div>
-                    <h3 className="text-neon-cyan font-medium text-sm">Show High-Precision Countdown</h3>
-                    <p className="text-xs text-gray-400">Display hours and minutes on the dashboard</p>
+                    <h3 className="text-neon-cyan font-medium text-sm">Precise Countdown</h3>
+                    <p className="text-xs text-gray-400">Show hours and minutes on the goal countdown</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input 
