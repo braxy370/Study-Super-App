@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Flame, Zap, Clock, CalendarDays, TrendingUp, Award } from 'lucide-react';
+import { Flame, Zap, Clock, TrendingUp, Award, CalendarDays, Target } from 'lucide-react';
 import { loadGameState, getLevelInfo, getRecentHistory } from '../utils/gamification';
 import { useSyllabus } from '../context/SyllabusContext';
 
@@ -18,16 +18,17 @@ export default function StatsPage({ settings }) {
   const weekHistory = getRecentHistory(7);
   const maxMinutes = Math.max(...weekHistory.map(h => h.minutes), 1);
 
-  // Subject breakdown
-  const subjectBreakdown = useMemo(() => {
+  // Category breakdown
+  const categoryBreakdown = useMemo(() => {
     return (subjects ?? []).map(subject => {
       const stats = getSubjectStats(subject.id);
       const perc = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
-      return { id: subject.id, name: subject.name, color: subject.color_code || '#00f3ff', percentage: perc, completed: stats.completed, total: stats.total };
+      return { id: subject.id, name: subject.name, color: subject.color_code || '#00e5ff', percentage: perc, completed: stats.completed, total: stats.total };
     });
   }, [subjects, getSubjectStats]);
 
   const totalHours = (gameState.totalMinutes / 60).toFixed(1);
+  const avgSessionMin = gameState.totalSessions > 0 ? Math.round(gameState.totalMinutes / gameState.totalSessions) : 0;
 
   return (
     <div className="flex flex-col gap-4 py-4">
@@ -94,7 +95,7 @@ export default function StatsPage({ settings }) {
         transition={{ delay: 0.2 }}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider">This Week</h3>
+          <h3 className="section-label">This Week</h3>
           <div className="flex items-center gap-1.5">
             <CalendarDays size={14} className="text-gray-500" />
             <span className="text-xs text-gray-500">Focus Time</span>
@@ -131,16 +132,44 @@ export default function StatsPage({ settings }) {
         </div>
       </motion.div>
 
-      {/* Mastery Overview */}
+      {/* Avg Session + Daily Goal */}
+      <div className="grid grid-cols-2 gap-3">
+        <motion.div
+          className="glass-panel p-4 text-center"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.25 }}
+        >
+          <div className="w-8 h-8 rounded-lg bg-neon-cyan/10 flex items-center justify-center mx-auto mb-2">
+            <Target size={16} className="text-neon-cyan" />
+          </div>
+          <div className="text-lg font-bold text-white">{avgSessionMin}m</div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wider">Avg Session</div>
+        </motion.div>
+        <motion.div
+          className="glass-panel p-4 text-center"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          <div className="w-8 h-8 rounded-lg bg-electric-purple/10 flex items-center justify-center mx-auto mb-2">
+            <Zap size={16} className="text-electric-purple" />
+          </div>
+          <div className="text-lg font-bold text-white">{(settings?.dailyGoalHours ?? 4).toFixed(1)}h</div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wider">Daily Goal</div>
+        </motion.div>
+      </div>
+
+      {/* Task Completion Overview */}
       {globalMetrics && globalMetrics.totalTasks > 0 && (
         <motion.div
           className="glass-panel p-4"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+          transition={{ delay: 0.35 }}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider">Mastery</h3>
+            <h3 className="section-label">Task Progress</h3>
             <span className="text-sm font-bold gradient-text">
               {globalMetrics.masteryPercentage.toFixed(1)}%
             </span>
@@ -162,10 +191,10 @@ export default function StatsPage({ settings }) {
             </div>
           </div>
 
-          {/* Subject breakdown */}
-          {subjectBreakdown.length > 0 && (
+          {/* Category breakdown */}
+          {categoryBreakdown.length > 0 && (
             <div className="space-y-2.5 pt-3 border-t border-white/5">
-              {subjectBreakdown.map(sub => (
+              {categoryBreakdown.map(sub => (
                 <div key={sub.id} className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: sub.color }} />
                   <span className="text-xs text-gray-400 flex-1 truncate">{sub.name}</span>

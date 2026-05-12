@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Send, Lightbulb, BookOpen, Brain, Loader2, ExternalLink, Copy, Check } from 'lucide-react';
+import { Sparkles, Send, Lightbulb, Brain, Loader2, Copy, Check, Timer, ListChecks, Zap, Info } from 'lucide-react';
 
 const QUICK_ACTIONS = [
-  { id: 'explain', label: 'Explain a concept', icon: BookOpen, prompt: 'Explain this concept simply: ' },
-  { id: 'quiz', label: 'Quiz me', icon: Brain, prompt: 'Create a quick 5-question quiz about: ' },
-  { id: 'plan', label: 'Study plan', icon: Lightbulb, prompt: 'Create a focused study plan for: ' },
+  { id: 'focus', label: 'Focus tips', icon: Timer, prompt: 'Give me tips to stay focused during a work session' },
+  { id: 'plan', label: 'Plan my day', icon: ListChecks, prompt: 'Help me create a productive daily plan for: ' },
+  { id: 'motivate', label: 'Motivation', icon: Zap, prompt: 'I need motivation to keep going with my work' },
+  { id: 'learn', label: 'Learn better', icon: Brain, prompt: 'What are the best techniques to learn and retain information about: ' },
+  { id: 'habit', label: 'Build habits', icon: Lightbulb, prompt: 'Help me build a daily habit of: ' },
 ];
 
 export default function AIPage() {
@@ -51,6 +53,10 @@ export default function AIPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleClearChat = () => {
+    setMessages([]);
+  };
+
   return (
     <div className="flex flex-col gap-4 py-4 min-h-[calc(100dvh-140px)]">
       {/* Header */}
@@ -62,39 +68,59 @@ export default function AIPage() {
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-electric-purple/20 to-neon-cyan/20 flex items-center justify-center mx-auto mb-2 border border-white/10">
           <Sparkles size={22} className="text-neon-cyan" />
         </div>
-        <h2 className="text-lg font-bold text-white">AI Study Helper</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Ask questions, get explanations, create quizzes</p>
+        <h2 className="text-lg font-bold text-white">AI Assistant</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Productivity tips, planning help, and motivation</p>
       </motion.div>
 
       {/* Quick Actions (shown when no messages) */}
       {messages.length === 0 && (
         <motion.div
-          className="grid grid-cols-1 sm:grid-cols-3 gap-2.5"
+          className="flex flex-col gap-2.5"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          {QUICK_ACTIONS.map((action, i) => (
-            <motion.button
-              key={action.id}
-              onClick={() => handleQuickAction(action)}
-              className="glass-panel p-4 flex flex-col items-center gap-2 text-center hover:bg-white/5 transition-all group"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 + i * 0.05 }}
-            >
-              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center group-hover:bg-neon-cyan/10 transition-colors">
-                <action.icon size={18} className="text-gray-400 group-hover:text-neon-cyan transition-colors" />
-              </div>
-              <span className="text-xs font-medium text-gray-400 group-hover:text-white transition-colors">{action.label}</span>
-            </motion.button>
-          ))}
+          {/* Info banner */}
+          <div className="glass-panel p-3 flex items-start gap-2.5">
+            <Info size={14} className="text-neon-cyan shrink-0 mt-0.5" />
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Responses are generated locally for now. Connect an AI API in settings for real-time answers.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {QUICK_ACTIONS.map((action, i) => (
+              <motion.button
+                key={action.id}
+                onClick={() => handleQuickAction(action)}
+                className="glass-panel p-3.5 flex flex-col items-center gap-2 text-center hover:bg-white/5 transition-all group"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 + i * 0.04 }}
+              >
+                <div className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center group-hover:bg-neon-cyan/10 transition-colors">
+                  <action.icon size={16} className="text-gray-400 group-hover:text-neon-cyan transition-colors" />
+                </div>
+                <span className="text-[11px] font-medium text-gray-400 group-hover:text-white transition-colors">{action.label}</span>
+              </motion.button>
+            ))}
+          </div>
         </motion.div>
       )}
 
       {/* Chat Messages */}
       {messages.length > 0 && (
         <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
+          {/* Clear chat button */}
+          <div className="flex justify-end">
+            <button
+              onClick={handleClearChat}
+              className="text-[10px] uppercase tracking-wider font-semibold text-gray-600 hover:text-gray-400 transition-colors px-2 py-1"
+            >
+              Clear Chat
+            </button>
+          </div>
+
           <AnimatePresence>
             {messages.map((msg) => (
               <motion.div
@@ -157,14 +183,11 @@ export default function AIPage() {
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="p-2.5 rounded-xl bg-gradient-to-r from-electric-purple to-neon-cyan text-white disabled:opacity-30 disabled:cursor-not-allowed transition-opacity hover:shadow-[0_0_15px_rgba(0,243,255,0.3)]"
+            className="p-2.5 rounded-xl bg-gradient-to-r from-electric-purple to-neon-cyan text-white disabled:opacity-30 disabled:cursor-not-allowed transition-opacity hover:shadow-[0_0_15px_rgba(0,229,255,0.3)]"
           >
             <Send size={16} />
           </button>
         </form>
-        <p className="text-center text-[10px] text-gray-600 mt-2">
-          AI responses are simulated. Connect an API for real answers.
-        </p>
       </div>
     </div>
   );
@@ -174,21 +197,25 @@ export default function AIPage() {
 function getSimulatedResponse(input) {
   const lower = input.toLowerCase();
 
-  if (lower.includes('quiz') || lower.includes('test')) {
-    return `Here's a quick quiz based on your topic:\n\n1. What is the main concept behind this topic?\n2. Can you name 3 key components?\n3. How does this apply in real-world scenarios?\n4. What are common misconceptions?\n5. Explain it as if teaching someone new.\n\n💡 Try answering each question before looking up the answers!`;
+  if (lower.includes('focus') || lower.includes('concentrat') || lower.includes('distract')) {
+    return `Here are some proven focus techniques:\n\n1. **Start with just 5 minutes** — momentum builds naturally\n2. **Use the Pomodoro timer** — it's right here in the app!\n3. **Single-task** — close all other tabs and apps\n4. **Time-block** — assign specific tasks to specific hours\n5. **Environment matters** — find a quiet, dedicated workspace\n\n💡 Try starting a 25-minute focus session now. You'll be surprised how much you get done.`;
   }
 
-  if (lower.includes('study plan') || lower.includes('schedule')) {
-    return `📋 Here's a suggested study plan:\n\n**Day 1-2:** Review fundamentals and key concepts\n**Day 3-4:** Practice problems and active recall\n**Day 5:** Teach the material to someone else\n**Day 6:** Take a practice test\n**Day 7:** Review weak areas and rest\n\n🔥 Pair each session with a 25-minute Pomodoro for best results!`;
+  if (lower.includes('plan') || lower.includes('schedule') || lower.includes('organize')) {
+    return `📋 Here's a productive daily framework:\n\n**Morning (High Energy)**\n• Tackle your hardest, most important task\n• Do deep work requiring concentration\n\n**Afternoon (Moderate Energy)**\n• Handle meetings, communication, and lighter tasks\n• Review progress on ongoing projects\n\n**Evening (Wind Down)**\n• Plan tomorrow's priorities\n• Reflect on what you accomplished\n\n🔥 Pair each block with a Pomodoro session for best results!`;
   }
 
-  if (lower.includes('explain') || lower.includes('what is')) {
-    return `Great question! Here's a simplified explanation:\n\nThis topic involves understanding the core principles and how they connect together. Think of it like building blocks — each concept supports the next.\n\n**Key takeaway:** Focus on understanding the "why" behind each concept, not just memorizing facts.\n\n💡 Try explaining this back to yourself in your own words — that's the best test of understanding.`;
+  if (lower.includes('motivat') || lower.includes('procrast') || lower.includes('stuck') || lower.includes('lazy')) {
+    return `💪 Here's what actually works against procrastination:\n\n1. **The 2-Minute Rule** — if it takes less than 2 minutes, do it now\n2. **Break it down** — large tasks feel overwhelming. Split into tiny steps.\n3. **Reward yourself** — complete a session, then take a proper break\n4. **Track your streak** — consistency beats intensity every time\n5. **Forgive yourself** — one missed day doesn't erase your progress\n\nRemember: the person who shows up every day beats the person who shows up perfectly once. Start small.`;
   }
 
-  if (lower.includes('motivat') || lower.includes('focus') || lower.includes('procrast')) {
-    return `💪 Here are some focus strategies:\n\n1. **Start with just 5 minutes** — momentum builds naturally\n2. **Use the Pomodoro timer** — it's right here in the app!\n3. **Break tasks into tiny steps** — small wins compound\n4. **Remove distractions** — put your phone in another room\n5. **Reward yourself** — celebrate completing each session\n\nRemember: consistency beats intensity. Even 25 minutes today is better than zero.`;
+  if (lower.includes('learn') || lower.includes('study') || lower.includes('remember') || lower.includes('retain')) {
+    return `🧠 Evidence-based learning techniques:\n\n1. **Active recall** — test yourself instead of re-reading\n2. **Spaced repetition** — review at increasing intervals\n3. **Teach it** — explaining to others deepens understanding\n4. **Interleave topics** — mix different subjects in one session\n5. **Sleep on it** — your brain consolidates during sleep\n\n📝 After each focus session, spend 5 minutes writing down what you learned in your own words.`;
   }
 
-  return `I understand you're asking about: "${input.slice(0, 100)}"\n\nHere are some thoughts:\n\n• Break this down into smaller, manageable pieces\n• Look for connections to things you already know\n• Practice active recall instead of passive reading\n• Use spaced repetition for long-term retention\n\n💡 Would you like me to create a quiz or study plan on this topic?`;
+  if (lower.includes('habit') || lower.includes('routine') || lower.includes('daily') || lower.includes('consistent')) {
+    return `🎯 Building lasting habits:\n\n1. **Stack habits** — attach new habits to existing ones\n2. **Start tiny** — 1 minute is better than 0 minutes\n3. **Track visually** — your streak counter is a powerful tool\n4. **Design your environment** — make good habits easy, bad ones hard\n5. **Never miss twice** — one skip is fine, two is a pattern\n\n⚡ The FocusFlow streak system is designed exactly for this. Every session counts toward your chain!`;
+  }
+
+  return `Great question about: "${input.slice(0, 80)}"\n\nHere are some thoughts:\n\n• Break this down into smaller, manageable pieces\n• Set a clear goal for what "done" looks like\n• Use your focus timer to dedicate uninterrupted time\n• Track your progress — even small wins compound\n\n💡 Would you like me to help create a plan or give specific tips? Try asking about focus, motivation, or learning techniques.`;
 }

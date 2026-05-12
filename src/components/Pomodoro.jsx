@@ -15,9 +15,9 @@ export default function Pomodoro({ durations: rawDurations, onAlarmStateChange }
   const [mode, setMode] = useState('WORK');
   
   const getModes = (durs) => ({
-    WORK: { label: 'Focus', minutes: durs?.WORK ?? 25, color: 'neon-cyan', hex: '#00f3ff' },
-    SHORT_BREAK: { label: 'Short Break', minutes: durs?.SHORT_BREAK ?? 5, color: 'electric-purple', hex: '#bc13fe' },
-    LONG_BREAK: { label: 'Long Break', minutes: durs?.LONG_BREAK ?? 15, color: 'electric-purple', hex: '#bc13fe' }
+    WORK: { label: 'Focus', minutes: durs?.WORK ?? 25, color: 'neon-cyan', hex: '#00e5ff' },
+    SHORT_BREAK: { label: 'Short Break', minutes: durs?.SHORT_BREAK ?? 5, color: 'electric-purple', hex: '#b341f0' },
+    LONG_BREAK: { label: 'Long Break', minutes: durs?.LONG_BREAK ?? 15, color: 'electric-purple', hex: '#b341f0' }
   });
 
   const MODES = getModes(durations);
@@ -209,55 +209,72 @@ export default function Pomodoro({ durations: rawDurations, onAlarmStateChange }
   const totalSeconds = currentModeConfig.minutes * 60;
   const progress = totalSeconds > 0 ? 1 - timeLeft / totalSeconds : 0;
 
+  // SVG circle calculations
+  const svgSize = 240;
+  const strokeWidth = 4;
+  const radius = (svgSize / 2) - strokeWidth - 8;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - progress);
+
   // Determine glow class
   const glowClass = clsx(
     'glass-panel p-6 w-full flex flex-col items-center relative overflow-hidden transition-all duration-700',
-    isActive && mode === 'WORK' && 'shadow-[0_0_30px_rgba(0,243,255,0.2)]',
-    isActive && mode !== 'WORK' && 'shadow-[0_0_30px_rgba(188,19,254,0.2)]',
-    isAlarmRinging && 'border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.5)]'
+    isActive && mode === 'WORK' && 'shadow-[0_0_30px_rgba(0,229,255,0.15)]',
+    isActive && mode !== 'WORK' && 'shadow-[0_0_30px_rgba(179,65,240,0.15)]',
+    isAlarmRinging && 'border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.4)]'
   );
 
   return (
     <div className={glowClass}>
-      <div className="flex gap-2 sm:gap-4 mb-6 z-10 w-full justify-center">
+      {/* Mode selector */}
+      <div className="flex gap-2 sm:gap-3 mb-6 z-10 w-full justify-center">
         {Object.entries(MODES).map(([key, config]) => (
           <button
             key={key}
             onClick={() => changeMode(key)}
             className={clsx(
-              'px-3 sm:px-4 py-3 min-h-[48px] rounded-lg text-sm font-medium transition-all duration-300 backdrop-blur-md',
+              'px-3 sm:px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-medium transition-all duration-300',
               mode === key 
-                ? 'bg-white/20 text-white border border-white/30' 
-                : 'text-gray-400 hover:text-white hover:bg-white/10 border border-transparent'
+                ? 'bg-white/10 text-white border border-white/15' 
+                : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
             )}
-            style={mode === key ? { boxShadow: `0 0 10px ${config.hex}` } : {}}
+            style={mode === key ? { boxShadow: `0 0 12px ${config.hex}30` } : {}}
           >
             {config.label}
           </button>
         ))}
       </div>
 
-      <div className="relative w-48 h-48 sm:w-64 sm:h-64 flex items-center justify-center z-10 mb-8">
-        <svg className="absolute inset-0 w-full h-full -rotate-90">
+      {/* Timer circle */}
+      <div className="relative w-48 h-48 sm:w-60 sm:h-60 flex items-center justify-center z-10 mb-6">
+        <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox={`0 0 ${svgSize} ${svgSize}`}>
+          {/* Background track */}
           <circle
-            cx="50%"
-            cy="50%"
-            r="48%"
-            className="stroke-white/10 fill-none"
-            strokeWidth="4"
+            cx={svgSize / 2}
+            cy={svgSize / 2}
+            r={radius}
+            className="stroke-white/8 fill-none"
+            strokeWidth={strokeWidth}
           />
+          {/* Progress arc */}
           <motion.circle
-            cx="50%"
-            cy="50%"
-            r="48%"
-            className={clsx('fill-none', mode === 'WORK' ? 'stroke-neon-cyan' : 'stroke-electric-purple', isAlarmRinging && 'stroke-red-500')}
-            strokeWidth="4"
+            cx={svgSize / 2}
+            cy={svgSize / 2}
+            r={radius}
+            className={clsx(
+              'fill-none',
+              mode === 'WORK' ? 'stroke-neon-cyan' : 'stroke-electric-purple',
+              isAlarmRinging && 'stroke-red-500'
+            )}
+            strokeWidth={strokeWidth}
             strokeLinecap="round"
-            initial={{ strokeDasharray: "0 1000" }}
-            animate={{ strokeDasharray: `${progress * 2 * Math.PI * 48}% 1000` }}
-            transition={{ duration: 1, ease: "linear" }}
+            strokeDasharray={circumference}
+            animate={{ strokeDashoffset }}
+            transition={{ duration: 0.5, ease: "linear" }}
           />
         </svg>
+        
+        {/* Time display */}
         <input
           ref={inputRef}
           type="text"
@@ -303,7 +320,8 @@ export default function Pomodoro({ durations: rawDurations, onAlarmStateChange }
         />
       </div>
 
-      <div className="flex items-center gap-4 mb-8 z-10">
+      {/* Round indicators */}
+      <div className="flex items-center gap-4 mb-6 z-10">
         <div className="flex gap-2">
           {[1, 2, 3, 4].map(round => {
             const visualRound = currentRounds % 4 === 0 && currentRounds > 0 ? 4 : currentRounds % 4;
@@ -311,9 +329,9 @@ export default function Pomodoro({ durations: rawDurations, onAlarmStateChange }
               <div
                 key={round}
                 className={clsx(
-                  "w-3 h-3 rounded-full transition-all duration-500",
+                  "w-2.5 h-2.5 rounded-full transition-all duration-500",
                   round <= visualRound
-                    ? "bg-neon-cyan shadow-[0_0_10px_#00f3ff]"
+                    ? "bg-neon-cyan shadow-[0_0_8px_#00e5ff]"
                     : "bg-white/10"
                 )}
               />
@@ -322,20 +340,23 @@ export default function Pomodoro({ durations: rawDurations, onAlarmStateChange }
         </div>
         <button
           onClick={resetRounds}
-          className="text-[10px] uppercase font-bold text-gray-500 hover:text-white transition-colors"
+          className="text-[10px] uppercase font-semibold text-gray-600 hover:text-white transition-colors"
         >
-          Reset Rounds
+          Reset
         </button>
       </div>
 
-      <div className="flex gap-6 z-10">
+      {/* Controls */}
+      <div className="flex gap-5 z-10">
         {!isAlarmRinging ? (
           <>
             <button
               onClick={toggleTimer}
               className={clsx(
-                'w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 transform hover:scale-110 shadow-lg',
-                mode === 'WORK' ? 'bg-neon-cyan/20 text-neon-cyan hover:bg-neon-cyan/30' : 'bg-electric-purple/20 text-electric-purple hover:bg-electric-purple/30'
+                'w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 transform hover:scale-105',
+                mode === 'WORK' 
+                  ? 'bg-neon-cyan/15 text-neon-cyan hover:bg-neon-cyan/25 shadow-[0_0_20px_rgba(0,229,255,0.15)]' 
+                  : 'bg-electric-purple/15 text-electric-purple hover:bg-electric-purple/25 shadow-[0_0_20px_rgba(179,65,240,0.15)]'
               )}
             >
               {isActive ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
@@ -343,37 +364,36 @@ export default function Pomodoro({ durations: rawDurations, onAlarmStateChange }
             
             <button
               onClick={resetTimer}
-              className="w-12 h-12 rounded-full bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white transition-all duration-300 transform hover:scale-110 flex items-center justify-center"
+              className="w-12 h-12 rounded-full bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all duration-300 transform hover:scale-105 flex items-center justify-center self-center"
             >
-              <RotateCcw size={24} />
+              <RotateCcw size={20} />
             </button>
           </>
         ) : (
           <button
             onClick={dismissAlarm}
-            className="px-6 py-4 min-h-[48px] rounded-full flex items-center justify-center gap-2 bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-all duration-300 transform hover:scale-105 shadow-[0_0_15px_rgba(239,68,68,0.4)] font-bold tracking-wider"
+            className="px-6 py-4 min-h-[48px] rounded-full flex items-center justify-center gap-2 bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-all duration-300 transform hover:scale-105 shadow-[0_0_15px_rgba(239,68,68,0.3)] font-bold tracking-wider"
           >
             <BellOff size={24} />
-            DISMISS ALARM
+            DISMISS
           </button>
         )}
       </div>
 
+      {/* Breathing background when active */}
       {isActive && !isAlarmRinging && (
-        <motion.div
+        <div
           className={clsx(
-            'absolute inset-0 opacity-20 pointer-events-none',
+            'absolute inset-0 pointer-events-none timer-breathe',
             mode === 'WORK' ? 'bg-neon-cyan' : 'bg-electric-purple'
           )}
-          animate={{ opacity: [0.05, 0.15, 0.05] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
         />
       )}
 
       {/* Reward Pulse */}
       {showReward && (
         <motion.div
-          className="absolute inset-0 z-50 pointer-events-none bg-neon-cyan/20 mix-blend-overlay"
+          className="absolute inset-0 z-50 pointer-events-none bg-neon-cyan/15 mix-blend-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: [0, 1, 0] }}
           transition={{ duration: 1, repeat: 3 }}

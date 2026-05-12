@@ -16,21 +16,13 @@ function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAlarmRinging, setIsAlarmRinging] = useState(false);
 
-  const defaultStart = new Date().toISOString().split('T')[0];
-  const defaultEnd = new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0];
-
   const DEFAULT_SETTINGS = {
-    start: defaultStart,
-    end: defaultEnd,
-    progressMode: 'Auto',
-    manualProgressValue: 0,
     pomodoro: {
       WORK: 25,
       SHORT_BREAK: 5,
       LONG_BREAK: 15
     },
     dailyGoalHours: 4.0,
-    showPrecisionCountdown: true
   };
 
   const [settings, setSettings] = useState(() => {

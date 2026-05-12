@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, ChevronDown, CheckCircle2, Search, X, BookOpen, ListTodo } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, CheckCircle2, Search, X, FolderOpen, ListTodo } from 'lucide-react';
 import clsx from 'clsx';
 import { useSyllabus } from '../context/SyllabusContext';
 
@@ -13,20 +13,20 @@ export default function TasksPage() {
     addSubject, deleteSubject, bulkAddChapters,
   } = useSyllabus();
 
-  const [viewMode, setViewMode] = useState('tasks'); // 'tasks' or 'syllabus'
-  const [expandedSubject, setExpandedSubject] = useState(null);
-  const [expandedChapter, setExpandedChapter] = useState(null);
+  const [viewMode, setViewMode] = useState('tasks'); // 'tasks' or 'categories'
+  const [expandedCategory, setExpandedCategory] = useState(null);
+  const [expandedGroup, setExpandedGroup] = useState(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Quick add state
   const [quickTaskText, setQuickTaskText] = useState('');
 
-  // Syllabus add state
-  const [showAddSubject, setShowAddSubject] = useState(false);
-  const [newSubjectName, setNewSubjectName] = useState('');
-  const [bulkChapterText, setBulkChapterText] = useState('');
-  const PRESET_COLORS = ['#00f3ff', '#bc13fe', '#39ff14', '#ff00ff', '#ffbf00'];
+  // Category add state
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [bulkGroupText, setBulkGroupText] = useState('');
+  const PRESET_COLORS = ['#00e5ff', '#b341f0', '#34d399', '#f59e0b', '#f43f5e'];
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
 
   // All pending tasks (flat list for quick view)
@@ -36,9 +36,9 @@ export default function TasksPage() {
       const subject = chapter ? (subjects ?? []).find(s => s.id === chapter.subject_id) : null;
       return {
         ...task,
-        subjectName: subject?.name || 'General',
-        subjectColor: subject?.color_code || '#bc13fe',
-        chapterTitle: chapter?.title || '',
+        categoryName: subject?.name || 'General',
+        categoryColor: subject?.color_code || '#b341f0',
+        groupTitle: chapter?.title || '',
       };
     });
   }, [tasks, chapters, subjects]);
@@ -47,7 +47,9 @@ export default function TasksPage() {
     return (tasks ?? []).filter(t => t.is_completed).length;
   }, [tasks]);
 
-  const filteredSubjects = useMemo(() => {
+  const totalTasks = (tasks ?? []).length;
+
+  const filteredCategories = useMemo(() => {
     const safeSubjects = subjects ?? [];
     if (!searchQuery.trim()) return safeSubjects;
     return safeSubjects.filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -56,27 +58,26 @@ export default function TasksPage() {
   const handleQuickAdd = (e) => {
     e.preventDefault();
     if (!quickTaskText.trim()) return;
-    // Add to first available chapter, or prompt to create
     if (chapters && chapters.length > 0) {
       addTask(chapters[0].id, quickTaskText.trim());
       setQuickTaskText('');
     }
   };
 
-  const handleAddSubject = (e) => {
+  const handleAddCategory = (e) => {
     e.preventDefault();
-    if (!newSubjectName.trim()) return;
-    const result = addSubject(newSubjectName, selectedColor);
+    if (!newCategoryName.trim()) return;
+    const result = addSubject(newCategoryName, selectedColor);
     if (result) {
-      if (bulkChapterText.trim()) {
-        const chaptersList = bulkChapterText.split('\n').filter(c => c.trim().length > 0);
-        if (chaptersList.length > 0) {
-          bulkAddChapters(result.id, chaptersList);
+      if (bulkGroupText.trim()) {
+        const groupsList = bulkGroupText.split('\n').filter(c => c.trim().length > 0);
+        if (groupsList.length > 0) {
+          bulkAddChapters(result.id, groupsList);
         }
       }
-      setNewSubjectName('');
-      setBulkChapterText('');
-      setShowAddSubject(false);
+      setNewCategoryName('');
+      setBulkGroupText('');
+      setShowAddCategory(false);
     }
   };
 
@@ -97,16 +98,16 @@ export default function TasksPage() {
           Tasks
         </button>
         <button
-          onClick={() => setViewMode('syllabus')}
+          onClick={() => setViewMode('categories')}
           className={clsx(
             'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all',
-            viewMode === 'syllabus'
+            viewMode === 'categories'
               ? 'bg-white/10 text-white shadow-sm'
               : 'text-gray-500 hover:text-gray-300'
           )}
         >
-          <BookOpen size={16} />
-          Syllabus
+          <FolderOpen size={16} />
+          Categories
         </button>
       </div>
 
@@ -131,8 +132,10 @@ export default function TasksPage() {
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider">Done</div>
               </div>
               <div className="flex-1 glass-panel p-3 text-center">
-                <div className="text-lg font-bold text-electric-purple">{(subjects ?? []).length}</div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider">Subjects</div>
+                <div className="text-lg font-bold text-electric-purple">
+                  {totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0}%
+                </div>
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider">Progress</div>
               </div>
             </div>
 
@@ -144,7 +147,7 @@ export default function TasksPage() {
                   type="text"
                   value={quickTaskText}
                   onChange={(e) => setQuickTaskText(e.target.value)}
-                  placeholder="Quick add a task..."
+                  placeholder="Add a task..."
                   className="flex-1 bg-transparent px-3 py-3.5 text-sm text-white placeholder-gray-500 focus:outline-none"
                 />
                 {quickTaskText && (
@@ -168,13 +171,13 @@ export default function TasksPage() {
                   >
                     <button
                       onClick={() => toggleTask(task.id)}
-                      className="w-5 h-5 rounded border-2 border-white/15 hover:border-neon-cyan/50 transition-all shrink-0 flex items-center justify-center hover:bg-neon-cyan/10"
+                      className="w-5 h-5 rounded border-2 border-white/15 hover:border-neon-cyan/50 transition-all shrink-0 flex items-center justify-center hover:bg-neon-cyan/10 checkbox-pop"
                     />
                     <div className="flex-1 min-w-0">
                       <span className="text-sm text-white/90 block truncate">{task.title}</span>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: task.subjectColor }} />
-                        <span className="text-[10px] text-gray-500 truncate">{task.subjectName}</span>
+                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: task.categoryColor }} />
+                        <span className="text-[10px] text-gray-500 truncate">{task.categoryName}</span>
                       </div>
                     </div>
                     <button
@@ -194,7 +197,7 @@ export default function TasksPage() {
                 <p className="text-sm text-white/80 font-medium">All caught up!</p>
                 <p className="text-xs text-gray-500 mt-1">
                   {(subjects ?? []).length === 0
-                    ? 'Switch to Syllabus view to add subjects and tasks'
+                    ? 'Switch to Categories to organize your tasks'
                     : 'No pending tasks. Great work!'}
                 </p>
               </div>
@@ -202,7 +205,7 @@ export default function TasksPage() {
           </motion.div>
         ) : (
           <motion.div
-            key="syllabus-view"
+            key="categories-view"
             initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -10 }}
@@ -216,7 +219,7 @@ export default function TasksPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search subjects..."
+                placeholder="Search categories..."
                 className="flex-1 bg-transparent px-3 py-3 text-sm text-white placeholder-gray-500 focus:outline-none"
               />
               {searchQuery && (
@@ -226,33 +229,33 @@ export default function TasksPage() {
               )}
             </div>
 
-            {/* Add Subject button */}
+            {/* Add Category button */}
             <button
-              onClick={() => setShowAddSubject(!showAddSubject)}
+              onClick={() => setShowAddCategory(!showAddCategory)}
               className="glass-panel p-3.5 flex items-center gap-3 text-left hover:bg-white/5 transition-colors"
             >
               <div className="w-8 h-8 rounded-lg bg-neon-cyan/10 flex items-center justify-center">
                 <Plus size={16} className="text-neon-cyan" />
               </div>
-              <span className="text-sm font-medium text-white/70">Add Subject</span>
+              <span className="text-sm font-medium text-white/70">Add Category</span>
             </button>
 
-            {/* Add Subject Form */}
+            {/* Add Category Form */}
             <AnimatePresence>
-              {showAddSubject && (
+              {showAddCategory && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   className="overflow-hidden"
                 >
-                  <form onSubmit={handleAddSubject} className="glass-panel p-4 flex flex-col gap-3">
+                  <form onSubmit={handleAddCategory} className="glass-panel p-4 flex flex-col gap-3">
                     <div className="flex gap-3">
                       <input
                         type="text"
-                        value={newSubjectName}
-                        onChange={(e) => setNewSubjectName(e.target.value)}
-                        placeholder="Subject name"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Category name"
                         className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan/50 transition-all"
                       />
                       <div className="flex gap-1.5 items-center">
@@ -271,51 +274,51 @@ export default function TasksPage() {
                       </div>
                     </div>
                     <textarea
-                      value={bulkChapterText}
-                      onChange={(e) => setBulkChapterText(e.target.value)}
-                      placeholder="Paste chapters/units (one per line)..."
+                      value={bulkGroupText}
+                      onChange={(e) => setBulkGroupText(e.target.value)}
+                      placeholder="Paste groups/sections (one per line)..."
                       className="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-cyan/50 transition-all resize-y min-h-[100px]"
                     />
                     <button
                       type="submit"
-                      className="w-full py-2.5 rounded-lg text-sm font-medium bg-gradient-to-r from-neon-cyan to-electric-purple text-white transition-all hover:shadow-[0_0_20px_rgba(0,243,255,0.3)]"
+                      className="w-full py-2.5 rounded-lg text-sm font-medium bg-gradient-to-r from-neon-cyan to-electric-purple text-white transition-all hover:shadow-[0_0_20px_rgba(0,229,255,0.3)]"
                     >
-                      Add Subject
+                      Add Category
                     </button>
                   </form>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Subject list */}
+            {/* Category list */}
             <div className="space-y-3">
-              {filteredSubjects.length === 0 && searchQuery && (
+              {filteredCategories.length === 0 && searchQuery && (
                 <div className="glass-panel p-8 text-center">
-                  <p className="text-sm text-gray-400">No subjects matching "{searchQuery}"</p>
+                  <p className="text-sm text-gray-400">No categories matching "{searchQuery}"</p>
                 </div>
               )}
 
-              {filteredSubjects.length === 0 && !searchQuery && (
+              {filteredCategories.length === 0 && !searchQuery && (
                 <div className="glass-panel p-10 flex flex-col items-center text-center">
                   <div className="w-14 h-14 rounded-2xl bg-electric-purple/10 flex items-center justify-center mb-3">
-                    <BookOpen size={28} className="text-electric-purple" />
+                    <FolderOpen size={28} className="text-electric-purple" />
                   </div>
-                  <p className="text-sm text-white/80 font-medium">No subjects yet</p>
-                  <p className="text-xs text-gray-500 mt-1">Tap "Add Subject" above to get started</p>
+                  <p className="text-sm text-white/80 font-medium">No categories yet</p>
+                  <p className="text-xs text-gray-500 mt-1">Tap "Add Category" above to organize your tasks</p>
                 </div>
               )}
 
-              {filteredSubjects.map(subject => {
+              {filteredCategories.map(subject => {
                 const stats = getSubjectStats(subject.id);
-                const subjectChapters = getChaptersForSubject(subject.id);
-                const isOpen = expandedSubject === subject.id;
+                const subjectGroups = getChaptersForSubject(subject.id);
+                const isOpen = expandedCategory === subject.id;
                 const progress = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
 
                 return (
                   <div key={subject.id} className="glass-panel overflow-hidden">
-                    {/* Subject Header */}
+                    {/* Category Header */}
                     <button
-                      onClick={() => setExpandedSubject(isOpen ? null : subject.id)}
+                      onClick={() => setExpandedCategory(isOpen ? null : subject.id)}
                       className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-white/3 transition-colors"
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -337,7 +340,7 @@ export default function TasksPage() {
                       </div>
                     </button>
 
-                    {/* Chapters */}
+                    {/* Groups */}
                     <AnimatePresence>
                       {isOpen && (
                         <motion.div
@@ -348,19 +351,19 @@ export default function TasksPage() {
                           className="overflow-hidden"
                         >
                           <div className="px-4 pb-3 border-t border-white/5 pt-2 space-y-1.5">
-                            {subjectChapters.length === 0 && (
-                              <p className="text-gray-600 text-xs text-center py-3">No chapters yet</p>
+                            {subjectGroups.length === 0 && (
+                              <p className="text-gray-600 text-xs text-center py-3">No groups yet</p>
                             )}
 
-                            {subjectChapters.map(chapter => {
+                            {subjectGroups.map(chapter => {
                               const chStats = getChapterStats(chapter.id);
                               const chTasks = getTasksForChapter(chapter.id);
-                              const isChOpen = expandedChapter === chapter.id;
+                              const isChOpen = expandedGroup === chapter.id;
 
                               return (
                                 <div key={chapter.id} className="rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden">
                                   <button
-                                    onClick={() => setExpandedChapter(isChOpen ? null : chapter.id)}
+                                    onClick={() => setExpandedGroup(isChOpen ? null : chapter.id)}
                                     className="w-full px-3 py-2.5 flex items-center justify-between text-left hover:bg-white/3 transition-colors"
                                   >
                                     <span className="text-sm text-white/70 truncate flex-1">{chapter.title}</span>
@@ -382,7 +385,7 @@ export default function TasksPage() {
                                       >
                                         <div className="px-3 pb-2 border-t border-white/5">
                                           {chTasks.length === 0 && (
-                                            <p className="text-gray-600 text-[11px] py-2 text-center">No tasks in this chapter</p>
+                                            <p className="text-gray-600 text-[11px] py-2 text-center">No tasks in this group</p>
                                           )}
 
                                           {chTasks.map(task => (
@@ -395,7 +398,7 @@ export default function TasksPage() {
                                                   className="sr-only peer"
                                                 />
                                                 <div className={clsx(
-                                                  "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
+                                                  "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200 checkbox-pop",
                                                   task.is_completed
                                                     ? "bg-neon-cyan/20 border-neon-cyan"
                                                     : "border-white/15 hover:border-white/30"
@@ -421,7 +424,7 @@ export default function TasksPage() {
                                             </div>
                                           ))}
 
-                                          {/* Add task to chapter */}
+                                          {/* Add task to group */}
                                           <form
                                             onSubmit={(e) => {
                                               e.preventDefault();
@@ -435,7 +438,7 @@ export default function TasksPage() {
                                             <Plus size={12} className="text-gray-600 shrink-0" />
                                             <input
                                               type="text"
-                                              value={expandedChapter === chapter.id ? newTaskTitle : ''}
+                                              value={expandedGroup === chapter.id ? newTaskTitle : ''}
                                               onChange={(e) => setNewTaskTitle(e.target.value)}
                                               placeholder="Add task..."
                                               className="flex-1 bg-transparent text-sm text-white placeholder-gray-600 focus:outline-none py-2"
@@ -449,13 +452,13 @@ export default function TasksPage() {
                               );
                             })}
 
-                            {/* Delete subject */}
+                            {/* Delete category */}
                             <button
                               onClick={() => deleteSubject(subject.id)}
                               className="w-full mt-2 py-2 text-xs text-gray-600 hover:text-accent-rose transition-colors flex items-center justify-center gap-1.5"
                             >
                               <Trash2 size={12} />
-                              Delete Subject
+                              Delete Category
                             </button>
                           </div>
                         </motion.div>

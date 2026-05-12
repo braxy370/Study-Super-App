@@ -1,9 +1,26 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Flame, Zap, Target, ChevronRight, Trophy } from 'lucide-react';
+import { Flame, Zap, Target, ChevronRight, Trophy, Sparkles } from 'lucide-react';
 import Pomodoro from '../components/Pomodoro';
-import { loadGameState, getLevelInfo, getTodayStats, getToday } from '../utils/gamification';
+import { loadGameState, getLevelInfo, getTodayStats } from '../utils/gamification';
 import { useSyllabus } from '../context/SyllabusContext';
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 5) return 'Burning midnight oil?';
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  if (hour < 21) return 'Good evening';
+  return 'Night owl mode';
+}
+
+function getMotivation(streak, sessions) {
+  if (sessions === 0 && streak === 0) return 'Start your first focus session today.';
+  if (sessions === 0) return 'Keep your streak alive — start a session.';
+  if (streak >= 7) return `${streak}-day streak! You're unstoppable.`;
+  if (streak >= 3) return 'Great momentum. Keep it going.';
+  return 'Every session counts. Stay focused.';
+}
 
 export default function HomePage({ settings, onAlarmStateChange, onOpenSettings }) {
   const [gameState, setGameState] = useState(loadGameState());
@@ -30,6 +47,7 @@ export default function HomePage({ settings, onAlarmStateChange, onOpenSettings 
   // Daily goal progress
   const dailyGoalMinutes = (settings?.dailyGoalHours ?? 4) * 60;
   const dailyProgress = Math.min((todayStats.minutes / dailyGoalMinutes) * 100, 100);
+  const goalComplete = dailyProgress >= 100;
 
   // Next up tasks
   const pendingTasks = (tasks ?? []).filter(t => !t.is_completed).slice(0, 3);
@@ -38,26 +56,28 @@ export default function HomePage({ settings, onAlarmStateChange, onOpenSettings 
     const subject = chapter ? (subjects ?? []).find(s => s.id === chapter.subject_id) : null;
     return {
       ...task,
-      subjectName: subject?.name || 'General',
-      subjectColor: subject?.color_code || '#bc13fe',
+      categoryName: subject?.name || 'General',
+      categoryColor: subject?.color_code || '#b341f0',
     };
   });
 
-  // Goal countdown
-  const endDate = settings?.end;
-  const getCountdownDays = () => {
-    if (!endDate) return null;
-    const now = new Date();
-    const target = new Date(endDate.includes('T') ? endDate : `${endDate}T00:00:00`);
-    if (isNaN(target.getTime())) return null;
-    const delta = target.getTime() - now.getTime();
-    if (delta < 0) return 0;
-    return Math.floor(delta / (1000 * 60 * 60 * 24));
-  };
-  const countdownDays = getCountdownDays();
-
   return (
     <div className="flex flex-col gap-4 py-4">
+      {/* Greeting */}
+      <motion.div
+        className="px-1"
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <h2 className="text-2xl font-bold text-white tracking-tight">
+          {getGreeting()} <span className="text-xl">✦</span>
+        </h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          {getMotivation(gameState.streak, todayStats.sessions)}
+        </p>
+      </motion.div>
+
       {/* Streak + Level Bar */}
       <div className="flex gap-3">
         {/* Streak */}
@@ -125,16 +145,11 @@ export default function HomePage({ settings, onAlarmStateChange, onOpenSettings 
         transition={{ delay: 0.2 }}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider">Today</h3>
-          {countdownDays !== null && (
-            <button
-              onClick={onOpenSettings}
-              className="text-xs text-gray-500 hover:text-neon-cyan transition-colors flex items-center gap-1"
-            >
-              <Target size={12} />
-              <span>{countdownDays} days to goal</span>
-            </button>
-          )}
+          <h3 className="section-label">Today's Progress</h3>
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Sparkles size={12} className="text-electric-purple" />
+            <span>{gameState.xp} XP total</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-3">
@@ -147,15 +162,17 @@ export default function HomePage({ settings, onAlarmStateChange, onOpenSettings 
             <div className="text-[10px] text-gray-500 uppercase tracking-wider">Sessions</div>
           </div>
           <div className="text-center">
-            <div className="text-xl font-bold text-electric-purple">{gameState.xp}</div>
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider">Total XP</div>
+            <div className={`text-xl font-bold ${goalComplete ? 'text-accent-green' : 'text-white'}`}>
+              {Math.round(dailyProgress)}%
+            </div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider">Goal</div>
           </div>
         </div>
 
         {/* Daily goal progress bar */}
         <div>
           <div className="flex justify-between items-center mb-1.5">
-            <span className="text-xs text-gray-400">Daily Goal</span>
+            <span className="text-xs text-gray-400">Daily Focus Goal</span>
             <span className="text-xs font-mono text-gray-400">
               {(todayStats.minutes / 60).toFixed(1)} / {(settings?.dailyGoalHours ?? 4).toFixed(1)}h
             </span>
@@ -164,9 +181,9 @@ export default function HomePage({ settings, onAlarmStateChange, onOpenSettings 
             <motion.div
               className="h-full rounded-full"
               style={{
-                background: dailyProgress >= 100
-                  ? 'linear-gradient(90deg, #34d399, #00f3ff)'
-                  : 'linear-gradient(90deg, #bc13fe, #00f3ff)',
+                background: goalComplete
+                  ? 'linear-gradient(90deg, #34d399, #00e5ff)'
+                  : 'linear-gradient(90deg, #b341f0, #00e5ff)',
               }}
               initial={{ width: 0 }}
               animate={{ width: `${dailyProgress}%` }}
@@ -176,7 +193,7 @@ export default function HomePage({ settings, onAlarmStateChange, onOpenSettings 
         </div>
       </motion.div>
 
-      {/* Next Up */}
+      {/* Next Up — tasks preview */}
       {nextUp.length > 0 && (
         <motion.div
           className="glass-panel p-4"
@@ -184,7 +201,7 @@ export default function HomePage({ settings, onAlarmStateChange, onOpenSettings 
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
         >
-          <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider mb-3">Next Up</h3>
+          <h3 className="section-label mb-3">Next Up</h3>
           <div className="space-y-2">
             {nextUp.map(task => (
               <div
@@ -193,13 +210,13 @@ export default function HomePage({ settings, onAlarmStateChange, onOpenSettings 
               >
                 <button
                   onClick={() => toggleTask(task.id)}
-                  className="w-5 h-5 rounded border-2 border-white/15 hover:border-neon-cyan/50 transition-colors shrink-0 flex items-center justify-center"
+                  className="w-5 h-5 rounded border-2 border-white/15 hover:border-neon-cyan/50 transition-colors shrink-0 flex items-center justify-center checkbox-pop"
                 />
                 <div className="flex-1 min-w-0">
                   <span className="text-sm text-white/90 truncate block">{task.title}</span>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: task.subjectColor }} />
-                    <span className="text-[10px] text-gray-500 truncate">{task.subjectName}</span>
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: task.categoryColor }} />
+                    <span className="text-[10px] text-gray-500 truncate">{task.categoryName}</span>
                   </div>
                 </div>
                 <ChevronRight size={14} className="text-gray-600 group-hover:text-gray-400 transition-colors shrink-0" />
