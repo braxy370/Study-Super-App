@@ -3,18 +3,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Send, Lightbulb, Brain, Loader2, Copy, Check, Timer, ListChecks, Zap, AlertTriangle, Wifi, WifiOff, Trash2 } from 'lucide-react';
 
 const QUICK_ACTIONS = [
-  { id: 'focus', label: 'Focus tips', icon: Timer, prompt: 'Give me practical tips to stay focused during a deep work session' },
-  { id: 'plan', label: 'Plan my day', icon: ListChecks, prompt: 'Help me create a productive daily plan' },
-  { id: 'motivate', label: 'Motivation', icon: Zap, prompt: 'I need motivation to keep going with my work' },
-  { id: 'learn', label: 'Learn better', icon: Brain, prompt: 'What are the best techniques to learn and retain information effectively?' },
-  { id: 'habit', label: 'Build habits', icon: Lightbulb, prompt: 'Help me build a consistent daily productivity habit' },
+  { id: 'focus', label: 'Focus tips', icon: Timer, prompt: 'How do I stay focused when I keep getting distracted?' },
+  { id: 'plan', label: 'Plan my day', icon: ListChecks, prompt: 'Help me plan a productive day — I have a lot to do' },
+  { id: 'motivate', label: 'Motivation', icon: Zap, prompt: 'I\'m struggling to stay motivated. What actually works?' },
+  { id: 'learn', label: 'Study tips', icon: Brain, prompt: 'What\'s the most effective way to study and actually remember things?' },
+  { id: 'habit', label: 'Build habits', icon: Lightbulb, prompt: 'How do I build a daily habit that actually sticks?' },
 ];
 
 const LOADING_MESSAGES = [
-  'Connecting to Gemini…',
-  'AI is thinking…',
-  'Generating response…',
-  'Almost there…',
+  'Thinking about this…',
+  'Putting it together…',
+  'Simplifying the answer…',
+  'Almost ready…',
 ];
 
 // ── Lightweight Markdown Renderer ──────────────────────────────────

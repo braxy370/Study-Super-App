@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenAI } from '@google/genai';
+import { SYSTEM_PROMPT, getModelConfig } from './prompt.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -8,36 +9,15 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '16kb' }));
 
-const SYSTEM_PROMPT = `You are FocusFlow AI, a productivity assistant embedded in a gamified focus app.
-
-Your role:
-- Help users plan tasks, manage time, build habits, and stay motivated
-- Give step-by-step answers for complex questions
-- Give concise answers for simple questions
-- Stay strictly productivity-focused — do not help with unrelated topics
-- Be honest when unsure — say "I'm not sure" rather than guessing
-- Reference the app's features naturally (Pomodoro timer, streaks, XP, task categories)
-- Use markdown formatting: **bold**, bullet points, numbered lists
-- Keep responses under 300 words unless the user asks for detail
-- Be warm, encouraging, and practical — never preachy
-
-You must NOT:
-- Generate code, write essays, or do homework
-- Discuss politics, violence, or NSFW content
-- Pretend to have real-time data, internet access, or memory of past conversations
-- Roleplay as other characters`;
-
 // Retry helper for transient Gemini errors
-async function callGemini(ai, contents, retries = 1) {
+async function callGemini(ai, contents, config, retries = 1) {
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3.1-flash-lite',
       contents,
       config: {
         systemInstruction: SYSTEM_PROMPT,
-        maxOutputTokens: 1024,
-        temperature: 0.7,
-        topP: 0.9,
+        ...config,
       },
     });
     return response;
@@ -51,9 +31,9 @@ async function callGemini(ai, contents, retries = 1) {
       err.message?.includes('ECONNRESET');
 
     if (isTransient && retries > 0) {
-      console.log(`[AI] Transient error, retrying in 1.5s... (${err.message})`);
+      console.log(`[AI] Transient error, retrying... (${err.message?.slice(0, 80)})`);
       await new Promise(r => setTimeout(r, 1500));
-      return callGemini(ai, contents, retries - 1);
+      return callGemini(ai, contents, config, retries - 1);
     }
     throw err;
   }
@@ -90,16 +70,18 @@ app.post('/api/ai/chat', async (req, res) => {
     }
     contents.push({ role: 'user', parts: [{ text: message }] });
 
-    console.log(`[AI] Request → gemini-3.1-flash-lite (${contents.length} messages)`);
+    // Adaptive config based on question complexity
+    const config = getModelConfig(message);
+    console.log(`[AI] Request → gemini-3.1-flash-lite | tokens:${config.maxOutputTokens} temp:${config.temperature} (${contents.length} msgs)`);
 
-    const response = await callGemini(ai, contents);
+    const response = await callGemini(ai, contents, config);
     const text = response.text?.trim();
 
     if (!text) {
       return res.status(502).json({ error: 'AI returned an empty response' });
     }
 
-    console.log(`[AI] ✓ Success (${text.length} chars)`);
+    console.log(`[AI] ✓ ${text.length} chars`);
     return res.json({ response: text });
 
   } catch (err) {
@@ -119,14 +101,13 @@ app.post('/api/ai/chat', async (req, res) => {
   }
 });
 
-// --- Health check (fast, no Gemini call) ---
+// --- Health check ---
 app.get('/api/health', (_req, res) => {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return res.json({ status: 'ok', ai: 'missing_key' });
   return res.json({ status: 'ok', ai: 'connected' });
 });
 
-// --- Start ---
 app.listen(PORT, () => {
   const hasKey = !!process.env.GEMINI_API_KEY;
   console.log(`\n  🚀 FocusFlow API running at http://localhost:${PORT}`);
