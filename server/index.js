@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenAI } from '@google/genai';
-import { SYSTEM_PROMPT, FAST_SYSTEM_PROMPT, getModelConfig } from './prompt.js';
+import { SYSTEM_PROMPT, FAST_SYSTEM_PROMPT, GROUNDED_ADDENDUM, getModelConfig, shouldUseSearch } from './prompt.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -11,6 +11,7 @@ app.use(express.json({ limit: '16kb' }));
 
 // ── Server-side timeout wrapper ──────────────────────────────────
 const SERVER_TIMEOUT_MS = 20000;
+const GROUNDED_TIMEOUT_MS = 24000;
 
 function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
@@ -43,15 +44,16 @@ app.post('/api/ai/chat', async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey: key });
 
-    // Determine adaptive config FIRST so we can tailor history limits
+    // Determine adaptive config FIRST
     const adaptive = fast ? null : getModelConfig(message);
+    const useSearch = !fast && shouldUseSearch(message);
     const tier = fast ? 'fast-retry' : adaptive.tier;
     const isFastTier = tier === 'fast' || tier === 'greeting' || tier === 'fast-retry';
 
-    // Build conversation contents — aggressively trim for fast tiers
+    // Build conversation contents
     const contents = [];
     if (Array.isArray(history)) {
-      const historyLimit = isFastTier ? 2 : 8;
+      const historyLimit = isFastTier ? 2 : (useSearch ? 4 : 8);
       for (const msg of history.slice(-historyLimit)) {
         if (msg.role === 'user') contents.push({ role: 'user', parts: [{ text: msg.content }] });
         else if (msg.role === 'assistant' || msg.role === 'model') contents.push({ role: 'model', parts: [{ text: msg.content }] });
@@ -76,14 +78,24 @@ app.post('/api/ai/chat', async (req, res) => {
       console.log(`[AI] ${tier} tier | tokens:${adaptive.maxOutputTokens} temp:${adaptive.temperature} (${contents.length} msgs)`);
     }
 
-    // Use shorter timeout for fast tiers
-    const timeout = isFastTier ? 12000 : SERVER_TIMEOUT_MS;
+    // Append grounded addendum if using search
+    if (useSearch) {
+      systemPrompt = systemPrompt + GROUNDED_ADDENDUM;
+      config.maxOutputTokens = Math.max(config.maxOutputTokens, 768);
+      console.log(`[AI] 🔍 Search grounding ENABLED`);
+    }
+
+    // Timeout: fast tier < normal < grounded
+    const timeout = isFastTier ? 12000 : (useSearch ? GROUNDED_TIMEOUT_MS : SERVER_TIMEOUT_MS);
+
+    const tools = useSearch ? [{ googleSearch: {} }] : [];
 
     const response = await withTimeout(
       ai.models.generateContent({
         model: 'gemini-3.1-flash-lite',
         contents,
         config: { systemInstruction: systemPrompt, ...config },
+        tools,
       }),
       timeout,
     );
@@ -92,8 +104,8 @@ app.post('/api/ai/chat', async (req, res) => {
     if (!text) return res.status(502).json({ error: 'AI returned an empty response' });
 
     const elapsed = Date.now() - startTime;
-    console.log(`[AI] ✓ ${text.length} chars | ${elapsed}ms | ${tier}`);
-    return res.json({ response: text, tier, elapsed });
+    console.log(`[AI] ✓ ${text.length} chars | ${elapsed}ms | ${tier}${useSearch ? ' | 🔍 grounded' : ''}`);
+    return res.json({ response: text, tier, elapsed, grounded: useSearch });
 
   } catch (err) {
     const elapsed = Date.now() - startTime;

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Send, Lightbulb, Brain, Loader2, Copy, Check, Timer, ListChecks, Zap, AlertTriangle, Wifi, WifiOff, Trash2, RefreshCw } from 'lucide-react';
+import { Sparkles, Send, Lightbulb, Brain, Loader2, Copy, Check, Timer, ListChecks, Zap, AlertTriangle, Wifi, WifiOff, Trash2, RefreshCw, Search } from 'lucide-react';
 
 const QUICK_ACTIONS = [
   { id: 'focus', label: 'Focus tips', icon: Timer, prompt: 'How do I stay focused when I keep getting distracted?' },
@@ -15,6 +15,13 @@ const LOADING_MESSAGES = [
   'Putting it together…',
   'Simplifying the answer…',
   'Almost ready…',
+];
+
+const SEARCH_LOADING_MESSAGES = [
+  'Checking the latest info…',
+  'Looking for recent updates…',
+  'Verifying current details…',
+  'Summarizing what I found…',
 ];
 
 // ── Lightweight Markdown Renderer ──────────────────────────────────
@@ -109,7 +116,6 @@ function inlineFormat(text) {
 }
 
 // ── Client-side complexity detection ──────────────────────────────
-// Determines if the question is simple enough to go fast-first
 const DEEP_CLIENT_SIGNALS = [
   'step by step', 'walk me through', 'in detail', 'explain deeply',
   'thoroughly', 'complete guide', 'pros and cons',
@@ -121,32 +127,41 @@ const DEEP_CLIENT_SIGNALS = [
 function isSimpleQuestion(message) {
   const lower = message.toLowerCase().trim();
   const wordCount = lower.split(/\s+/).length;
-
-  // Short greetings are always simple
   if (wordCount <= 5 && /^(hi|hey|hello|thanks|thank you|ok|got it|cool|yo|sup)\b/.test(lower)) return true;
-
-  // If any deep signal is present, it's not simple
   if (DEEP_CLIENT_SIGNALS.some(s => lower.includes(s))) return false;
-
-  // Code or technical syntax → not simple
   if (/[{}<>=;]|```|function |class |import |const |let |var /.test(message)) return false;
-
-  // Long questions with question marks → not simple
   if (wordCount > 15 && lower.includes('?')) return false;
-
-  // Everything else under 15 words is simple
   return wordCount <= 15;
 }
 
-// ── Contextual Fallback Generator ─────────────────────────────────
-// Generates a topic-aware fallback that provides a partial helpful answer
-// instead of generic retry advice
+// ── Client-side search detection (lightweight mirror) ─────────────
+// Used ONLY to pick the right loading messages and adjust client timeouts.
+// The server makes the actual search decision.
+const CLIENT_SEARCH_HINTS = [
+  'latest', 'current price', 'current weather', 'today\'s', 'tonight\'s',
+  'live score', 'release date', 'exam date', 'exam result',
+  'news', 'trending', 'upcoming', 'new version',
+  'this week', 'this month', 'right now',
+];
 
+const CLIENT_SEARCH_ENTITIES = [
+  /\bmlbb\b/i, /\bipl\b/i, /\bworld\s*cup\b/i,
+  /\bbitcoin\b/i, /\bethereum\b/i, /\bcrypto\b/i,
+  /\bassam\s*polytechnic\b/i,
+];
+
+function looksLikeSearchQuery(message) {
+  const lower = message.toLowerCase().trim();
+  if (CLIENT_SEARCH_HINTS.some(s => lower.includes(s))) return true;
+  if (CLIENT_SEARCH_ENTITIES.some(p => p.test(message))) return true;
+  return false;
+}
+
+// ── Contextual Fallback Generator ─────────────────────────────────
 function getContextualFallback(input) {
   const lower = input.toLowerCase().trim();
   const topic = extractTopic(input);
 
-  // Try to match common question patterns and give a contextual partial answer
   if (/^(how to|how do i|how can i)\b/.test(lower)) {
     return buildHowToFallback(topic, input);
   }
@@ -160,12 +175,10 @@ function getContextualFallback(input) {
     return buildComparisonFallback(topic, input);
   }
 
-  // Generic but still topic-aware fallback
   return buildGenericFallback(topic, input);
 }
 
 function extractTopic(input) {
-  // Strip common question prefixes to extract the core topic
   return input
     .replace(/^(how to|how do i|how can i|what is|what are|what's|define|meaning of|tips for|ways to|best way to|should i|can you|tell me about|give me|explain)\s+/i, '')
     .replace(/[?.!]+$/, '')
@@ -228,25 +241,35 @@ Tap retry below and I'll get right on it.`;
 // ── API call with smart retry strategy ────────────────────────────
 async function callAI(message, history) {
   const simple = isSimpleQuestion(message);
+  const isSearch = looksLikeSearchQuery(message);
 
-  if (simple) {
-    // Simple questions: try fast-path FIRST for speed
+  if (simple && !isSearch) {
+    // Simple non-search questions: try fast-path FIRST for speed
     const result = await doFetch(message, history, true, 10000);
     if (result.ok) return result;
     if (result.permanent) return result;
 
-    // Fast-path failed → try normal path as backup
     const result2 = await doFetch(message, history, false, 12000);
     if (result2.ok) return result2;
 
     return result.error ? result : result2;
+  } else if (isSearch) {
+    // Search queries: give more time, no fast-path first attempt
+    const result = await doFetch(message, history, false, 18000);
+    if (result.ok) return result;
+    if (result.permanent) return result;
+
+    // Retry with fast-path (will skip search server-side)
+    const result2 = await doFetch(message, history, true, 8000);
+    if (result2.ok) return result2;
+
+    return result.error ? result : result2;
   } else {
-    // Complex questions: try normal path first
+    // Complex non-search questions: try normal path first
     const result = await doFetch(message, history, false, 14000);
     if (result.ok) return result;
     if (result.permanent) return result;
 
-    // Normal failed → try fast-path for a quick partial answer
     const result2 = await doFetch(message, history, true, 8000);
     if (result2.ok) return result2;
 
@@ -264,7 +287,7 @@ async function doFetch(message, history, fast, timeoutMs) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, history, fast }),
       signal: controller.signal,
-      keepalive: true,  // helps mobile browsers keep the request alive
+      keepalive: true,
     });
     clearTimeout(timeout);
 
@@ -276,7 +299,14 @@ async function doFetch(message, history, fast, timeoutMs) {
     }
 
     const data = await res.json();
-    return { ok: true, response: data.response, fast, tier: data.tier, elapsed: data.elapsed };
+    return {
+      ok: true,
+      response: data.response,
+      fast,
+      tier: data.tier,
+      elapsed: data.elapsed,
+      grounded: data.grounded || false,
+    };
   } catch (err) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
@@ -295,6 +325,7 @@ export default function AIPage() {
   const [copiedId, setCopiedId] = useState(null);
   const [apiStatus, setApiStatus] = useState('checking');
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
+  const [isSearching, setIsSearching] = useState(false);
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
   const requestRef = useRef(null);
@@ -315,17 +346,18 @@ export default function AIPage() {
       .catch(() => setApiStatus('offline'));
   }, []);
 
-  // Rotate loading messages every 2s (was 3s) for better perceived speed
+  // Rotate loading messages every 2s — use search messages when appropriate
   useEffect(() => {
     if (!isLoading) return;
-    setLoadingMsg(LOADING_MESSAGES[0]);
+    const msgs = isSearching ? SEARCH_LOADING_MESSAGES : LOADING_MESSAGES;
+    setLoadingMsg(msgs[0]);
     let idx = 0;
     const interval = setInterval(() => {
-      idx = Math.min(idx + 1, LOADING_MESSAGES.length - 1);
-      setLoadingMsg(LOADING_MESSAGES[idx]);
+      idx = Math.min(idx + 1, msgs.length - 1);
+      setLoadingMsg(msgs[idx]);
     }, 2000);
     return () => clearInterval(interval);
-  }, [isLoading]);
+  }, [isLoading, isSearching]);
 
   const handleSend = useCallback(async (text) => {
     const userMessage = text || input.trim();
@@ -337,22 +369,23 @@ export default function AIPage() {
     const userMsg = { id: Date.now(), role: 'user', content: userMessage };
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
+    setIsSearching(looksLikeSearchQuery(userMessage));
 
     const historyForAPI = messages.map(m => ({ role: m.role, content: m.content }));
     const result = await callAI(userMessage, historyForAPI);
 
     let responseContent;
     let isOffline = false;
+    let grounded = false;
 
     if (result.ok) {
       responseContent = result.response;
+      grounded = result.grounded;
       setApiStatus('online');
     } else if (result.error) {
-      // Server returned a specific error — show contextual fallback
       responseContent = getContextualFallback(userMessage);
       isOffline = true;
     } else {
-      // Complete network failure — contextual fallback
       responseContent = getContextualFallback(userMessage);
       isOffline = true;
       setApiStatus('offline');
@@ -363,13 +396,14 @@ export default function AIPage() {
       role: 'assistant',
       content: responseContent,
       isOffline,
+      grounded,
       originalQuestion: isOffline ? userMessage : null,
     }]);
     setIsLoading(false);
+    setIsSearching(false);
     requestRef.current = null;
   }, [input, isLoading, messages]);
 
-  // Retry handler for failed messages
   const handleRetry = useCallback(async (originalQuestion) => {
     if (isLoading || !originalQuestion) return;
     handleSend(originalQuestion);
@@ -502,6 +536,14 @@ export default function AIPage() {
                     <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                   )}
 
+                  {/* Grounded search indicator */}
+                  {msg.role === 'assistant' && msg.grounded && !msg.isOffline && (
+                    <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-white/5">
+                      <Search size={10} className="text-neon-cyan/60" />
+                      <span className="text-[10px] text-gray-500">Answered with latest information</span>
+                    </div>
+                  )}
+
                   {/* Warm failure footer with inline retry button */}
                   {msg.role === 'assistant' && msg.isOffline && (
                     <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-white/5">
@@ -538,7 +580,11 @@ export default function AIPage() {
           {isLoading && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
               <div className="glass-panel px-4 py-3 flex items-center gap-2">
-                <Loader2 size={14} className="text-neon-cyan animate-spin" />
+                {isSearching ? (
+                  <Search size={14} className="text-neon-cyan animate-pulse" />
+                ) : (
+                  <Loader2 size={14} className="text-neon-cyan animate-spin" />
+                )}
                 <span className="text-sm text-gray-400">{loadingMsg}</span>
               </div>
             </motion.div>
