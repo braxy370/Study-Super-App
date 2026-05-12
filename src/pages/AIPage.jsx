@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Send, Lightbulb, Brain, Loader2, Copy, Check, Timer, ListChecks, Zap, AlertTriangle, Wifi, WifiOff, Trash2 } from 'lucide-react';
+import { Sparkles, Send, Lightbulb, Brain, Loader2, Copy, Check, Timer, ListChecks, Zap, AlertTriangle, Wifi, WifiOff, Trash2, RefreshCw } from 'lucide-react';
 
 const QUICK_ACTIONS = [
   { id: 'focus', label: 'Focus tips', icon: Timer, prompt: 'How do I stay focused when I keep getting distracted?' },
@@ -28,14 +28,12 @@ function renderMarkdown(text) {
   while (i < lines.length) {
     const line = lines[i];
 
-    // Empty line → spacing
     if (line.trim() === '') {
       elements.push(<div key={i} className="h-2" />);
       i++;
       continue;
     }
 
-    // Heading (### / ## / #)
     const headingMatch = line.match(/^(#{1,3})\s+(.+)/);
     if (headingMatch) {
       const level = headingMatch[1].length;
@@ -45,11 +43,10 @@ function renderMarkdown(text) {
       continue;
     }
 
-    // Numbered list (1. / 2. etc.)
-    if (/^\d+[\.\)]\s+/.test(line)) {
+    if (/^\d+[\.\\)]\s+/.test(line)) {
       const listItems = [];
-      while (i < lines.length && /^\d+[\.\)]\s+/.test(lines[i])) {
-        const content = lines[i].replace(/^\d+[\.\)]\s+/, '');
+      while (i < lines.length && /^\d+[\.\\)]\s+/.test(lines[i])) {
+        const content = lines[i].replace(/^\d+[\.\\)]\s+/, '');
         listItems.push(<li key={i} className="ml-1">{inlineFormat(content)}</li>);
         i++;
       }
@@ -61,7 +58,6 @@ function renderMarkdown(text) {
       continue;
     }
 
-    // Bullet list (- / • / *)
     if (/^[\-\•\*]\s+/.test(line)) {
       const listItems = [];
       while (i < lines.length && /^[\-\•\*]\s+/.test(lines[i])) {
@@ -77,7 +73,6 @@ function renderMarkdown(text) {
       continue;
     }
 
-    // Regular paragraph
     elements.push(<p key={i} className="text-sm text-gray-200 leading-relaxed">{inlineFormat(line)}</p>);
     i++;
   }
@@ -85,38 +80,27 @@ function renderMarkdown(text) {
   return <div className="space-y-1.5">{elements}</div>;
 }
 
-// Inline formatting: **bold**, *italic*, `code`, emoji safe
 function inlineFormat(text) {
   if (!text) return text;
-
   const parts = [];
   let remaining = text;
   let key = 0;
 
   while (remaining.length > 0) {
-    // Bold: **text**
     const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
     if (boldMatch && boldMatch.index !== undefined) {
-      if (boldMatch.index > 0) {
-        parts.push(<span key={key++}>{remaining.slice(0, boldMatch.index)}</span>);
-      }
+      if (boldMatch.index > 0) parts.push(<span key={key++}>{remaining.slice(0, boldMatch.index)}</span>);
       parts.push(<strong key={key++} className="font-semibold text-white">{boldMatch[1]}</strong>);
       remaining = remaining.slice(boldMatch.index + boldMatch[0].length);
       continue;
     }
-
-    // Inline code: `text`
     const codeMatch = remaining.match(/`(.+?)`/);
     if (codeMatch && codeMatch.index !== undefined) {
-      if (codeMatch.index > 0) {
-        parts.push(<span key={key++}>{remaining.slice(0, codeMatch.index)}</span>);
-      }
+      if (codeMatch.index > 0) parts.push(<span key={key++}>{remaining.slice(0, codeMatch.index)}</span>);
       parts.push(<code key={key++} className="px-1.5 py-0.5 rounded bg-white/8 text-neon-cyan/80 text-xs font-mono">{codeMatch[1]}</code>);
       remaining = remaining.slice(codeMatch.index + codeMatch[0].length);
       continue;
     }
-
-    // No more matches — push the rest
     parts.push(<span key={key++}>{remaining}</span>);
     break;
   }
@@ -124,81 +108,181 @@ function inlineFormat(text) {
   return parts.length === 1 ? parts[0] : <>{parts}</>;
 }
 
-// ── Fallback responses ────────────────────────────────────────────
-function getOfflineResponse(input) {
-  const lower = input.toLowerCase();
+// ── Client-side complexity detection ──────────────────────────────
+// Determines if the question is simple enough to go fast-first
+const DEEP_CLIENT_SIGNALS = [
+  'step by step', 'walk me through', 'in detail', 'explain deeply',
+  'thoroughly', 'complete guide', 'pros and cons',
+  'difference between', 'compare',
+  'debug', 'troubleshoot', 'architecture', 'design pattern',
+  'algorithm', 'complexity', 'implement',
+];
 
-  if (lower.includes('focus') || lower.includes('concentrat') || lower.includes('distract')) {
-    return `Here are some proven focus techniques:\n\n1. **Start with just 5 minutes** — momentum builds naturally\n2. **Use the Pomodoro timer** — it's right here in the app!\n3. **Single-task** — close all other tabs and apps\n4. **Time-block** — assign specific tasks to specific hours\n5. **Environment matters** — find a quiet, dedicated workspace\n\n💡 Try starting a 25-minute focus session now.`;
-  }
-  if (lower.includes('plan') || lower.includes('schedule') || lower.includes('organize')) {
-    return `📋 Here's a productive daily framework:\n\n**Morning (High Energy)**\n• Tackle your hardest, most important task\n• Do deep work requiring concentration\n\n**Afternoon (Moderate Energy)**\n• Handle meetings, communication, and lighter tasks\n• Review progress on ongoing projects\n\n**Evening (Wind Down)**\n• Plan tomorrow's priorities\n• Reflect on what you accomplished\n\n🔥 Pair each block with a Pomodoro session for best results!`;
-  }
-  if (lower.includes('motivat') || lower.includes('procrast') || lower.includes('stuck') || lower.includes('lazy')) {
-    return `💪 Here's what actually works against procrastination:\n\n1. **The 2-Minute Rule** — if it takes less than 2 minutes, do it now\n2. **Break it down** — large tasks feel overwhelming. Split into tiny steps.\n3. **Reward yourself** — complete a session, then take a proper break\n4. **Track your streak** — consistency beats intensity every time\n5. **Forgive yourself** — one missed day doesn't erase your progress\n\nStart small. The person who shows up every day wins.`;
-  }
-  if (lower.includes('learn') || lower.includes('study') || lower.includes('remember') || lower.includes('retain')) {
-    return `🧠 Evidence-based learning techniques:\n\n1. **Active recall** — test yourself instead of re-reading\n2. **Spaced repetition** — review at increasing intervals\n3. **Teach it** — explaining to others deepens understanding\n4. **Interleave topics** — mix different subjects in one session\n5. **Sleep on it** — your brain consolidates during sleep\n\n📝 After each focus session, spend 5 minutes writing down what you learned.`;
-  }
-  if (lower.includes('habit') || lower.includes('routine') || lower.includes('daily') || lower.includes('consistent')) {
-    return `🎯 Building lasting habits:\n\n1. **Stack habits** — attach new habits to existing ones\n2. **Start tiny** — 1 minute is better than 0 minutes\n3. **Track visually** — your streak counter is a powerful tool\n4. **Design your environment** — make good habits easy, bad ones hard\n5. **Never miss twice** — one skip is fine, two is a pattern\n\n⚡ Every focus session counts toward your chain!`;
-  }
-  return `Here are some thoughts on "${input.slice(0, 60)}":\n\n• Break this down into smaller, manageable pieces\n• Set a clear goal for what "done" looks like\n• Use your focus timer to dedicate uninterrupted time\n• Track your progress — even small wins compound\n\n💡 Try asking me about focus, motivation, planning, or learning techniques for more specific help.`;
+function isSimpleQuestion(message) {
+  const lower = message.toLowerCase().trim();
+  const wordCount = lower.split(/\s+/).length;
+
+  // Short greetings are always simple
+  if (wordCount <= 5 && /^(hi|hey|hello|thanks|thank you|ok|got it|cool|yo|sup)\b/.test(lower)) return true;
+
+  // If any deep signal is present, it's not simple
+  if (DEEP_CLIENT_SIGNALS.some(s => lower.includes(s))) return false;
+
+  // Code or technical syntax → not simple
+  if (/[{}<>=;]|```|function |class |import |const |let |var /.test(message)) return false;
+
+  // Long questions with question marks → not simple
+  if (wordCount > 15 && lower.includes('?')) return false;
+
+  // Everything else under 15 words is simple
+  return wordCount <= 15;
 }
 
-// ── API call with retry + timeout ─────────────────────────────────
-async function callAI(message, history, retries = 1) {
+// ── Contextual Fallback Generator ─────────────────────────────────
+// Generates a topic-aware fallback that provides a partial helpful answer
+// instead of generic retry advice
+
+function getContextualFallback(input) {
+  const lower = input.toLowerCase().trim();
+  const topic = extractTopic(input);
+
+  // Try to match common question patterns and give a contextual partial answer
+  if (/^(how to|how do i|how can i)\b/.test(lower)) {
+    return buildHowToFallback(topic, input);
+  }
+  if (/^(what is|what are|what's|define|meaning of)\b/.test(lower)) {
+    return buildDefinitionFallback(topic, input);
+  }
+  if (/^(tips for|ways to|best way to)\b/.test(lower)) {
+    return buildTipsFallback(topic, input);
+  }
+  if (/^(should i|which is better|is it)\b/.test(lower)) {
+    return buildComparisonFallback(topic, input);
+  }
+
+  // Generic but still topic-aware fallback
+  return buildGenericFallback(topic, input);
+}
+
+function extractTopic(input) {
+  // Strip common question prefixes to extract the core topic
+  return input
+    .replace(/^(how to|how do i|how can i|what is|what are|what's|define|meaning of|tips for|ways to|best way to|should i|can you|tell me about|give me|explain)\s+/i, '')
+    .replace(/[?.!]+$/, '')
+    .trim();
+}
+
+function buildHowToFallback(topic, _original) {
+  return `That took a bit longer than expected, but here's a quick starting point for **${topic}**:
+
+1. **Start with the basics** — look up the core materials or tools you'll need
+2. **Find a simple tutorial** — a beginner-friendly guide will get you moving fast
+3. **Practice the first step** — don't try to master everything at once, just start
+
+I can give you a more detailed walkthrough — just tap retry below.`;
+}
+
+function buildDefinitionFallback(topic, _original) {
+  return `The full explanation for **${topic}** is taking a moment to process.
+
+In the meantime — this is a great question to explore. Try asking again and I'll break it down clearly for you with examples.
+
+**Quick tip:** Shorter, focused questions tend to get faster answers.`;
+}
+
+function buildTipsFallback(topic, _original) {
+  return `I was putting together tips for **${topic}** but the response took too long.
+
+Here's a quick framework while I process:
+- **Start small** — pick one thing to focus on first
+- **Be consistent** — regular practice beats intensity
+- **Track your progress** — seeing improvement keeps you motivated
+
+Tap retry for the full detailed version.`;
+}
+
+function buildComparisonFallback(topic, _original) {
+  return `I was working on that comparison about **${topic}** but it took longer than expected.
+
+For most comparison questions, consider:
+- **Your specific situation** — what matters most to you?
+- **Pros and cons** — every option has trade-offs
+- **Try before you commit** — test small before going all-in
+
+Retry and I'll give you a proper breakdown.`;
+}
+
+function buildGenericFallback(topic, _original) {
+  const displayTopic = topic.length > 60 ? topic.slice(0, 57) + '…' : topic;
+
+  return `I was working on your question about **${displayTopic}** but it took longer than expected.
+
+Here's what I'd suggest:
+- **Try again** — it usually works on the second attempt
+- **Simplify the question** — breaking it into smaller parts gets faster results
+- **Be specific** — the more focused the question, the quicker the answer
+
+Tap retry below and I'll get right on it.`;
+}
+
+// ── API call with smart retry strategy ────────────────────────────
+async function callAI(message, history) {
+  const simple = isSimpleQuestion(message);
+
+  if (simple) {
+    // Simple questions: try fast-path FIRST for speed
+    const result = await doFetch(message, history, true, 10000);
+    if (result.ok) return result;
+    if (result.permanent) return result;
+
+    // Fast-path failed → try normal path as backup
+    const result2 = await doFetch(message, history, false, 12000);
+    if (result2.ok) return result2;
+
+    return result.error ? result : result2;
+  } else {
+    // Complex questions: try normal path first
+    const result = await doFetch(message, history, false, 14000);
+    if (result.ok) return result;
+    if (result.permanent) return result;
+
+    // Normal failed → try fast-path for a quick partial answer
+    const result2 = await doFetch(message, history, true, 8000);
+    if (result2.ok) return result2;
+
+    return result.error ? result : result2;
+  }
+}
+
+async function doFetch(message, history, fast, timeoutMs) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout (accounts for cold start)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch('/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, history }),
+      body: JSON.stringify({ message, history, fast }),
       signal: controller.signal,
+      keepalive: true,  // helps mobile browsers keep the request alive
     });
-
     clearTimeout(timeout);
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      const errMsg = data.error || `Server error (${res.status})`;
-
-      // Don't retry config errors — they won't fix themselves
-      if (res.status === 400 || res.status === 500) {
-        return { ok: false, error: errMsg };
-      }
-
-      // Retry transient errors (502, 503, 429)
-      if (retries > 0) {
-        await new Promise(r => setTimeout(r, 1500));
-        return callAI(message, history, retries - 1);
-      }
-
-      return { ok: false, error: errMsg };
+      const errMsg = data.error || `Something went wrong`;
+      const permanent = res.status === 400 || (res.status === 500 && data.code !== 'TIMEOUT');
+      return { ok: false, error: errMsg, permanent, code: data.code };
     }
 
     const data = await res.json();
-    return { ok: true, response: data.response };
+    return { ok: true, response: data.response, fast, tier: data.tier, elapsed: data.elapsed };
   } catch (err) {
     clearTimeout(timeout);
-
     if (err.name === 'AbortError') {
-      // Timeout — retry once with a fresh timeout
-      if (retries > 0) {
-        return callAI(message, history, retries - 1);
-      }
-      return { ok: false, error: 'Request timed out. The AI might be warming up — please try again.' };
+      return { ok: false, error: null, permanent: false, code: 'CLIENT_TIMEOUT' };
     }
-
-    // Network error — retry once
-    if (retries > 0) {
-      await new Promise(r => setTimeout(r, 1000));
-      return callAI(message, history, retries - 1);
-    }
-
-    return { ok: false, error: null }; // Silent fallback
+    return { ok: false, error: null, permanent: false, code: 'NETWORK_ERROR' };
   }
 }
 
@@ -213,19 +297,15 @@ export default function AIPage() {
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
-  const requestRef = useRef(null); // Dedup guard
+  const requestRef = useRef(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Health check — lightweight, no Gemini call (just checks env var on server)
   useEffect(() => {
     fetch('/api/health')
-      .then(r => {
-        if (!r.ok) throw new Error('Health check failed');
-        return r.json();
-      })
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(data => {
         if (data.ai === 'connected') setApiStatus('online');
         else if (data.ai === 'invalid_key') setApiStatus('invalid_key');
@@ -235,7 +315,7 @@ export default function AIPage() {
       .catch(() => setApiStatus('offline'));
   }, []);
 
-  // Rotate loading messages for perceived speed
+  // Rotate loading messages every 2s (was 3s) for better perceived speed
   useEffect(() => {
     if (!isLoading) return;
     setLoadingMsg(LOADING_MESSAGES[0]);
@@ -243,15 +323,13 @@ export default function AIPage() {
     const interval = setInterval(() => {
       idx = Math.min(idx + 1, LOADING_MESSAGES.length - 1);
       setLoadingMsg(LOADING_MESSAGES[idx]);
-    }, 2500);
+    }, 2000);
     return () => clearInterval(interval);
   }, [isLoading]);
 
   const handleSend = useCallback(async (text) => {
     const userMessage = text || input.trim();
     if (!userMessage || isLoading) return;
-
-    // Dedup guard: prevent overlapping requests
     if (requestRef.current) return;
     requestRef.current = true;
 
@@ -260,11 +338,7 @@ export default function AIPage() {
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
 
-    const historyForAPI = messages.map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
-
+    const historyForAPI = messages.map(m => ({ role: m.role, content: m.content }));
     const result = await callAI(userMessage, historyForAPI);
 
     let responseContent;
@@ -274,10 +348,12 @@ export default function AIPage() {
       responseContent = result.response;
       setApiStatus('online');
     } else if (result.error) {
-      responseContent = `⚠️ ${result.error}\n\nHere's an offline suggestion instead:\n\n${getOfflineResponse(userMessage)}`;
+      // Server returned a specific error — show contextual fallback
+      responseContent = getContextualFallback(userMessage);
       isOffline = true;
     } else {
-      responseContent = getOfflineResponse(userMessage);
+      // Complete network failure — contextual fallback
+      responseContent = getContextualFallback(userMessage);
       isOffline = true;
       setApiStatus('offline');
     }
@@ -287,14 +363,19 @@ export default function AIPage() {
       role: 'assistant',
       content: responseContent,
       isOffline,
+      originalQuestion: isOffline ? userMessage : null,
     }]);
     setIsLoading(false);
     requestRef.current = null;
   }, [input, isLoading, messages]);
 
-  const handleQuickAction = (action) => {
-    handleSend(action.prompt);
-  };
+  // Retry handler for failed messages
+  const handleRetry = useCallback(async (originalQuestion) => {
+    if (isLoading || !originalQuestion) return;
+    handleSend(originalQuestion);
+  }, [isLoading, handleSend]);
+
+  const handleQuickAction = (action) => { handleSend(action.prompt); };
 
   const handleCopy = (content, id) => {
     navigator.clipboard.writeText(content).catch(() => {});
@@ -302,9 +383,7 @@ export default function AIPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleClearChat = () => {
-    setMessages([]);
-  };
+  const handleClearChat = () => { setMessages([]); };
 
   return (
     <div className="flex flex-col gap-4 py-4 min-h-[calc(100dvh-140px)]">
@@ -320,7 +399,6 @@ export default function AIPage() {
         <h2 className="text-lg font-bold text-white">AI Assistant</h2>
         <p className="text-xs text-gray-500 mt-0.5">Productivity tips, planning help, and motivation</p>
 
-        {/* Connection status badge */}
         <div className="flex items-center justify-center gap-1.5 mt-2">
           {apiStatus === 'online' ? (
             <>
@@ -351,7 +429,7 @@ export default function AIPage() {
         </div>
       </motion.div>
 
-      {/* Quick Actions (shown when no messages) */}
+      {/* Quick Actions */}
       {messages.length === 0 && (
         <motion.div
           className="flex flex-col gap-2.5"
@@ -394,7 +472,6 @@ export default function AIPage() {
       {/* Chat Messages */}
       {messages.length > 0 && (
         <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
-          {/* Clear chat button */}
           <div className="flex justify-end">
             <button
               onClick={handleClearChat}
@@ -419,18 +496,29 @@ export default function AIPage() {
                     ? 'bg-electric-purple/15 border border-electric-purple/20 text-white'
                     : 'glass-panel text-gray-200'
                 }`}>
-                  {/* Render markdown for assistant, plain text for user */}
                   {msg.role === 'assistant' ? (
                     renderMarkdown(msg.content)
                   ) : (
                     <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                   )}
 
-                  {/* Offline indicator */}
+                  {/* Warm failure footer with inline retry button */}
                   {msg.role === 'assistant' && msg.isOffline && (
-                    <div className="flex items-center gap-1 mt-2 pt-2 border-t border-white/5">
-                      <WifiOff size={10} className="text-gray-600" />
-                      <span className="text-[10px] text-gray-600">Offline response</span>
+                    <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-white/5">
+                      <div className="flex items-center gap-1.5">
+                        <WifiOff size={10} className="text-gray-600" />
+                        <span className="text-[10px] text-gray-500">Partial answer — full response was interrupted</span>
+                      </div>
+                      {msg.originalQuestion && (
+                        <button
+                          onClick={() => handleRetry(msg.originalQuestion)}
+                          disabled={isLoading}
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-[10px] text-neon-cyan font-medium disabled:opacity-30"
+                        >
+                          <RefreshCw size={10} />
+                          Retry
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -448,11 +536,7 @@ export default function AIPage() {
           </AnimatePresence>
 
           {isLoading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex justify-start"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
               <div className="glass-panel px-4 py-3 flex items-center gap-2">
                 <Loader2 size={14} className="text-neon-cyan animate-spin" />
                 <span className="text-sm text-gray-400">{loadingMsg}</span>

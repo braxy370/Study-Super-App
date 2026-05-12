@@ -61,41 +61,66 @@ Bad: Forcing kitchen/road analogies into every answer.
 - Never pretend to have internet access or remember past conversations
 - If a question is outside your scope, say so briefly and redirect`;
 
-// ── Adaptive Config ──────────────────────────────────────────────
-// Adjusts temperature and token budget based on question complexity
+// Concise system instruction for fast-path requests
+export const FAST_SYSTEM_PROMPT = `You are FocusFlow AI — a calm, helpful assistant.
+Answer directly in 2-4 sentences. Be clear and practical. Use **bold** for key terms.
+Do not write long responses. Do not apologize. Do not use filler.`;
 
-const COMPLEX_SIGNALS = [
-  'step by step', 'explain', 'how does', 'how do', 'why does', 'why do',
-  'difference between', 'compare', 'pros and cons', 'in detail',
-  'deeply', 'thoroughly', 'complete guide', 'walk me through',
+// ── Adaptive Config ──────────────────────────────────────────────
+
+// Signals that REQUIRE deep analysis
+const DEEP_SIGNALS = [
+  'step by step', 'walk me through', 'in detail', 'explain deeply',
+  'thoroughly', 'complete guide', 'pros and cons',
+  'difference between', 'compare',
   'debug', 'troubleshoot', 'architecture', 'design pattern',
+  'algorithm', 'complexity', 'implement',
 ];
 
-const SIMPLE_SIGNALS = [
-  'what is', 'what are', 'define', 'meaning of',
-  'yes or no', 'should i', 'which is better',
-  'thanks', 'thank you', 'ok', 'got it', 'cool',
-  'hi', 'hello', 'hey',
+// Signals indicating simple/casual questions
+const CASUAL_SIGNALS = [
+  'what is', 'what are', 'what\'s', 'define', 'meaning of',
+  'yes or no', 'should i', 'which is better', 'is it',
+  'thanks', 'thank you', 'ok', 'got it', 'cool', 'nice',
+  'hi', 'hello', 'hey', 'sup', 'yo',
+  'how to', 'how do i', 'how can i', 'tips for', 'ways to',
+  'can you', 'tell me about', 'give me',
 ];
 
 export function getModelConfig(message) {
   const lower = message.toLowerCase().trim();
   const wordCount = lower.split(/\s+/).length;
 
-  // Very short messages (greetings, acknowledgements)
-  if (wordCount <= 4 && SIMPLE_SIGNALS.some(s => lower.includes(s))) {
-    return { maxOutputTokens: 256, temperature: 0.6, topP: 0.85 };
+  // Greetings and acknowledgements — ultra-fast
+  if (wordCount <= 5 && /^(hi|hey|hello|thanks|thank you|ok|got it|cool|yo|sup)\b/.test(lower)) {
+    return { maxOutputTokens: 150, temperature: 0.5, topP: 0.85, tier: 'greeting' };
   }
 
-  // Complex / detailed questions
-  if (
-    wordCount > 15 ||
-    COMPLEX_SIGNALS.some(s => lower.includes(s)) ||
-    (lower.includes('?') && (lower.includes('why') || lower.includes('how')))
-  ) {
-    return { maxOutputTokens: 1536, temperature: 0.75, topP: 0.92 };
+  // Explicit deep-analysis requests
+  if (DEEP_SIGNALS.some(s => lower.includes(s))) {
+    return { maxOutputTokens: 1536, temperature: 0.75, topP: 0.92, tier: 'deep' };
   }
 
-  // Default — moderate depth
-  return { maxOutputTokens: 768, temperature: 0.7, topP: 0.9 };
+  // Contains code, equations, or technical syntax
+  if (/[{}<>=;]|```|function |class |import |const |let |var /.test(message)) {
+    return { maxOutputTokens: 1024, temperature: 0.65, topP: 0.88, tier: 'moderate' };
+  }
+
+  // Long multi-part questions (15+ words with question marks)
+  if (wordCount > 15 && lower.includes('?')) {
+    return { maxOutputTokens: 1024, temperature: 0.72, topP: 0.9, tier: 'moderate' };
+  }
+
+  // Short casual questions (≤8 words) — ultra-fast path
+  if (wordCount <= 8 && CASUAL_SIGNALS.some(s => lower.includes(s))) {
+    return { maxOutputTokens: 400, temperature: 0.6, topP: 0.85, tier: 'fast' };
+  }
+
+  // Simple / casual questions — fast response
+  if (wordCount <= 12 || CASUAL_SIGNALS.some(s => lower.includes(s))) {
+    return { maxOutputTokens: 512, temperature: 0.65, topP: 0.88, tier: 'fast' };
+  }
+
+  // Default — moderate
+  return { maxOutputTokens: 768, temperature: 0.7, topP: 0.9, tier: 'moderate' };
 }

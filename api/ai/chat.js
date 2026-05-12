@@ -1,6 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 
-// ── System Prompt ────────────────────────────────────────────────
+// ── Prompts ──────────────────────────────────────────────────────
+// Duplicated from server/prompt.js because Vercel can't import from outside api/
+
 const SYSTEM_PROMPT = `You are FocusFlow AI — a calm, sharp productivity assistant inside a gamified focus app.
 
 ## Your personality
@@ -43,11 +45,6 @@ The trick isn't motivation — it's making the first step so small that it feels
 - Keep paragraphs short (2-3 sentences max)
 - One emoji per response maximum — only if it adds clarity
 
-## Analogies — use selectively
-Good: "RAM is like your desk space — more room means more things open at once."
-Good: "A database index works like a textbook index — you find the page without reading everything."
-Bad: Forcing kitchen/road analogies into every answer.
-
 ## What you help with
 - Productivity, focus, time management, habits
 - Study techniques, learning strategies, exam prep
@@ -61,52 +58,82 @@ Bad: Forcing kitchen/road analogies into every answer.
 - Never pretend to have internet access or remember past conversations
 - If a question is outside your scope, say so briefly and redirect`;
 
+const FAST_SYSTEM_PROMPT = `You are FocusFlow AI — a calm, helpful assistant.
+Answer directly in 2-4 sentences. Be clear and practical. Use **bold** for key terms.
+Do not write long responses. Do not apologize. Do not use filler.`;
+
 // ── Adaptive Config ──────────────────────────────────────────────
-const COMPLEX_SIGNALS = [
-  'step by step', 'explain', 'how does', 'how do', 'why does', 'why do',
-  'difference between', 'compare', 'pros and cons', 'in detail',
-  'deeply', 'thoroughly', 'complete guide', 'walk me through',
+
+// Signals that REQUIRE deep analysis
+const DEEP_SIGNALS = [
+  'step by step', 'walk me through', 'in detail', 'explain deeply',
+  'thoroughly', 'complete guide', 'pros and cons',
+  'difference between', 'compare',
   'debug', 'troubleshoot', 'architecture', 'design pattern',
+  'algorithm', 'complexity', 'implement',
 ];
-const SIMPLE_SIGNALS = [
-  'what is', 'what are', 'define', 'meaning of',
-  'yes or no', 'should i', 'which is better',
-  'thanks', 'thank you', 'ok', 'got it', 'cool',
-  'hi', 'hello', 'hey',
+
+// Signals indicating simple/casual questions
+const CASUAL_SIGNALS = [
+  'what is', 'what are', 'what\'s', 'define', 'meaning of',
+  'yes or no', 'should i', 'which is better', 'is it',
+  'thanks', 'thank you', 'ok', 'got it', 'cool', 'nice',
+  'hi', 'hello', 'hey', 'sup', 'yo',
+  'how to', 'how do i', 'how can i', 'tips for', 'ways to',
+  'can you', 'tell me about', 'give me',
 ];
 
 function getModelConfig(message) {
   const lower = message.toLowerCase().trim();
   const wordCount = lower.split(/\s+/).length;
-  if (wordCount <= 4 && SIMPLE_SIGNALS.some(s => lower.includes(s))) {
-    return { maxOutputTokens: 256, temperature: 0.6, topP: 0.85 };
+
+  // Greetings and acknowledgements — ultra-fast
+  if (wordCount <= 5 && /^(hi|hey|hello|thanks|thank you|ok|got it|cool|yo|sup)\b/.test(lower)) {
+    return { maxOutputTokens: 150, temperature: 0.5, topP: 0.85, tier: 'greeting' };
   }
-  if (wordCount > 15 || COMPLEX_SIGNALS.some(s => lower.includes(s)) ||
-      (lower.includes('?') && (lower.includes('why') || lower.includes('how')))) {
-    return { maxOutputTokens: 1536, temperature: 0.75, topP: 0.92 };
+
+  // Explicit deep-analysis requests
+  if (DEEP_SIGNALS.some(s => lower.includes(s))) {
+    return { maxOutputTokens: 1536, temperature: 0.75, topP: 0.92, tier: 'deep' };
   }
-  return { maxOutputTokens: 768, temperature: 0.7, topP: 0.9 };
+
+  // Contains code, equations, or technical syntax
+  if (/[{}<>=;]|```|function |class |import |const |let |var /.test(message)) {
+    return { maxOutputTokens: 1024, temperature: 0.65, topP: 0.88, tier: 'moderate' };
+  }
+
+  // Long multi-part questions (15+ words with question marks)
+  if (wordCount > 15 && lower.includes('?')) {
+    return { maxOutputTokens: 1024, temperature: 0.72, topP: 0.9, tier: 'moderate' };
+  }
+
+  // Short casual questions (≤8 words) — ultra-fast path
+  if (wordCount <= 8 && CASUAL_SIGNALS.some(s => lower.includes(s))) {
+    return { maxOutputTokens: 400, temperature: 0.6, topP: 0.85, tier: 'fast' };
+  }
+
+  // Simple / casual questions — fast response
+  if (wordCount <= 12 || CASUAL_SIGNALS.some(s => lower.includes(s))) {
+    return { maxOutputTokens: 512, temperature: 0.65, topP: 0.88, tier: 'fast' };
+  }
+
+  // Default — moderate
+  return { maxOutputTokens: 768, temperature: 0.7, topP: 0.9, tier: 'moderate' };
 }
 
-// ── Retry helper ─────────────────────────────────────────────────
-async function callGemini(ai, contents, config, retries = 1) {
-  try {
-    return await ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
-      contents,
-      config: { systemInstruction: SYSTEM_PROMPT, ...config },
-    });
-  } catch (err) {
-    const isTransient =
-      err.message?.includes('503') || err.message?.includes('429') ||
-      err.message?.includes('UNAVAILABLE') || err.message?.includes('RESOURCE_EXHAUSTED') ||
-      err.message?.includes('fetch failed') || err.message?.includes('ECONNRESET');
-    if (isTransient && retries > 0) {
-      await new Promise(r => setTimeout(r, 1500));
-      return callGemini(ai, contents, config, retries - 1);
-    }
-    throw err;
-  }
+// ── Server-side timeout wrapper ──────────────────────────────────
+// Races the Gemini call against a timeout so we can return a clean
+// error before Vercel's 30s gateway limit kills the function.
+const SERVER_TIMEOUT_MS = 20000; // 20s — leaves 10s buffer for Vercel
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('SERVER_TIMEOUT')), ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
 }
 
 // ── Handler ──────────────────────────────────────────────────────
@@ -120,8 +147,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const startTime = Date.now();
+
   try {
-    const { message, history } = req.body || {};
+    const { message, history, fast } = req.body || {};
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required' });
     }
@@ -133,30 +162,78 @@ export default async function handler(req, res) {
     if (!key) return res.status(500).json({ error: 'AI service is not configured on the server.' });
 
     const ai = new GoogleGenAI({ apiKey: key });
+
+    // Determine adaptive config FIRST so we can tailor history limits
+    const adaptive = fast ? null : getModelConfig(message);
+    const tier = fast ? 'fast-retry' : adaptive.tier;
+    const isFastTier = tier === 'fast' || tier === 'greeting' || tier === 'fast-retry';
+
+    // Build conversation contents — aggressively trim for fast tiers
     const contents = [];
     if (Array.isArray(history)) {
-      for (const msg of history.slice(-10)) {
+      const historyLimit = isFastTier ? 2 : 8;
+      for (const msg of history.slice(-historyLimit)) {
         if (msg.role === 'user') contents.push({ role: 'user', parts: [{ text: msg.content }] });
         else if (msg.role === 'assistant' || msg.role === 'model') contents.push({ role: 'model', parts: [{ text: msg.content }] });
       }
     }
     contents.push({ role: 'user', parts: [{ text: message }] });
 
-    const config = getModelConfig(message);
-    const response = await callGemini(ai, contents, config);
-    const text = response.text?.trim();
+    // Choose config
+    let config;
+    let systemPrompt;
 
+    if (fast) {
+      config = { maxOutputTokens: 300, temperature: 0.5, topP: 0.85 };
+      systemPrompt = FAST_SYSTEM_PROMPT;
+    } else if (isFastTier) {
+      // Use the lighter system prompt for fast-tier requests too
+      config = { maxOutputTokens: adaptive.maxOutputTokens, temperature: adaptive.temperature, topP: adaptive.topP };
+      systemPrompt = FAST_SYSTEM_PROMPT;
+    } else {
+      config = { maxOutputTokens: adaptive.maxOutputTokens, temperature: adaptive.temperature, topP: adaptive.topP };
+      systemPrompt = SYSTEM_PROMPT;
+    }
+
+    // Use shorter server timeout for fast tiers
+    const timeout = isFastTier ? 12000 : SERVER_TIMEOUT_MS;
+
+    // Single attempt with server-side timeout protection
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents,
+        config: { systemInstruction: systemPrompt, ...config },
+      }),
+      timeout,
+    );
+
+    const text = response.text?.trim();
     if (!text) return res.status(502).json({ error: 'AI returned an empty response' });
-    return res.status(200).json({ response: text });
+
+    const elapsed = Date.now() - startTime;
+    return res.status(200).json({ response: text, tier, elapsed });
 
   } catch (err) {
-    console.error('[AI Error]', err.message || err);
+    const elapsed = Date.now() - startTime;
+    console.error(`[AI Error] ${elapsed}ms |`, err.message?.slice(0, 200) || err);
+
+    // Server-side timeout — return clean error before Vercel kills us
+    if (err.message === 'SERVER_TIMEOUT') {
+      return res.status(504).json({
+        error: 'Response took too long. Try again — it usually works on retry.',
+        code: 'TIMEOUT',
+        elapsed,
+      });
+    }
+
     if (err.message?.includes('API key not valid') || err.message?.includes('API_KEY_INVALID'))
       return res.status(500).json({ error: 'AI API key is invalid.', code: 'INVALID_KEY' });
     if (err.message?.includes('not found') || err.message?.includes('does not exist'))
       return res.status(500).json({ error: 'AI model not available.', code: 'MODEL_ERROR' });
     if (err.message?.includes('429') || err.message?.includes('RESOURCE_EXHAUSTED'))
-      return res.status(429).json({ error: 'Too many requests. Please wait a moment.' });
-    return res.status(502).json({ error: 'AI service is temporarily unavailable. Please try again.' });
+      return res.status(429).json({ error: 'High demand right now. Please try again in a moment.', code: 'RATE_LIMIT' });
+
+    return res.status(502).json({ error: 'AI is taking longer than expected. Try again.', code: 'SERVER_ERROR' });
   }
 }
